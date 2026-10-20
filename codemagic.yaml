@@ -27,7 +27,7 @@ workflows:
       - name: Install locked dependencies
         script: |
           set -eu
-          npm install --global pnpm@11.25.0
+          npm install --global --force pnpm@11.25.0
           pnpm install --frozen-lockfile
       - name: Check source
         script: |
