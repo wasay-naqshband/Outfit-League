@@ -4,6 +4,7 @@
     "slug": "outfit-league",
     "scheme": "outfitleague",
     "version": "0.1.0",
+    "icon": "./assets/branding/outfit-league-logo.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
@@ -17,12 +18,21 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "name": "Outfit League"
+      "name": "Outfit League",
+      "favicon": "./assets/branding/outfit-league-logo.png"
     },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFBEA",
+          "image": "./assets/branding/outfit-league-logo.png",
+          "imageWidth": 240
+        }
+      ],
       [
         "expo-sharing",
         {

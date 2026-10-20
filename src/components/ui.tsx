@@ -182,9 +182,12 @@ export function Logo({ onPress }: { onPress?: () => void }) {
       accessibilityLabel={onPress ? "Profile and settings" : "Outfit League"}
       style={s.logo}
     >
-      <Text style={{ fontFamily: f.heading, color: c.yellow, fontSize: 15 }}>
-        OL
-      </Text>
+      <Image
+        source={require("../../assets/branding/outfit-league-logo.png")}
+        contentFit="contain"
+        accessibilityLabel="Outfit League hanger logo"
+        style={s.logoImage}
+      />
     </Pressable>
   );
 }
@@ -824,9 +827,17 @@ const s = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: c.ink,
+    backgroundColor: c.cream,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  logoImage: {
+    position: "absolute",
+    width: 112,
+    height: 112,
+    left: -37,
+    top: -23,
   },
   pill: {
     height: 44,
