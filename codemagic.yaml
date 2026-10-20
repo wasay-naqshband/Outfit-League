@@ -12,8 +12,11 @@ workflows:
       xcode: 26.4
       cocoapods: default
       ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.outfitleague.app
+        provisioning_profiles:
+          - outfit-league-main-groups
+          - outfit-league-share
+        certificates:
+          - Outfit League certificate
       vars:
         CI: "1"
         EXPO_NO_TELEMETRY: "1"
