@@ -1,0 +1,244 @@
+import { before, after, test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { PGlite } from "@electric-sql/pglite";
+const db = new PGlite(),
+  owner = randomUUID(),
+  other = randomUUID(),
+  a = randomUUID(),
+  b = randomUUID();
+before(async () => {
+  await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+ create schema auth;create schema storage;create table auth.users(id uuid primary key);
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ grant usage on schema auth to public;
+ create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+ create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,created_at timestamptz default now());
+ create table public.try_on_jobs(id uuid primary key,owner_id uuid,status text);`);
+  await db.exec(
+    await readFile("supabase/migrations/202610190003_library.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/202610190004_explore.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile("supabase/migrations/202610190005_battles.sql", "utf8"),
+  );
+  await db.query("insert into auth.users values($1),($2)", [owner, other]);
+  await db.query(
+    "insert into public.library_items(id,owner_id,kind,name,explore_image) values($1,$3,'inspiration','Sample A','navy'),($2,$3,'inspiration','Sample B','green')",
+    [a, b, owner],
+  );
+});
+after(() => db.close());
+async function service(sql: string, args: unknown[] = []) {
+  return db.transaction(async (tx) => {
+    await tx.exec("set local role service_role");
+    return tx.query<Record<string, any>>(sql, args);
+  });
+}
+async function user(
+  sql: string,
+  args: unknown[] = [],
+  id: string | null = owner,
+) {
+  return db.transaction(async (tx) => {
+    await tx.exec(id ? "set local role authenticated" : "set local role anon");
+    await tx.query("select set_config('request.jwt.claim.sub',$1,true)", [
+      id ?? "",
+    ]);
+    return tx.query(sql, args);
+  });
+}
+async function create(mode = "anonymous") {
+  const id = randomUUID();
+  await service(
+    "select public.create_battle($1,$2,'Test battle',$3,'library',$4,'library',$5)",
+    [owner, id, mode, a, b],
+  );
+  return id;
+}
+async function publish(id: string) {
+  await service(
+    "update public.battles set ready=true,a_sample='navy',b_sample='green' where id=$1",
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+}
+test("private drafts require owned distinct sources and an image-ready publish transition", async () => {
+  const id = await create();
+  assert.equal(
+    (await user("select * from public.battles where id=$1", [id])).rows.length,
+    1,
+  );
+  assert.equal(
+    (await user("select * from public.battles where id=$1", [id], other)).rows
+      .length,
+    0,
+  );
+  await assert.rejects(
+    user("select * from public.battles", [], null),
+    /permission denied/,
+  );
+  await assert.rejects(
+    service(
+      "select public.create_battle($1,$2,'Foreign','anonymous','library',$3,'library',$4)",
+      [other, randomUUID(), a, b],
+    ),
+    /INVALID_SOURCE/,
+  );
+  await assert.rejects(
+    service(
+      "select public.create_battle($1,$2,'Same','anonymous','library',$3,'library',$3)",
+      [owner, randomUUID(), a],
+    ),
+    /check constraint/,
+  );
+  await assert.rejects(
+    service("select public.manage_battle($1,$2,'publish')", [owner, id]),
+    /INVALID_STATE/,
+  );
+  await publish(id);
+  await assert.rejects(
+    service("select public.manage_battle($1,$2,'unpublish')", [other, id]),
+    /NOT_FOUND/,
+  );
+});
+test("anonymous votes discard names, persist once and cannot change with repeated calls", async () => {
+  const id = await create();
+  await publish(id);
+  await service(
+    "select public.cast_battle_vote($1,'opaque-key','A','Do not store me',false)",
+    [id],
+  );
+  const repeat = await service(
+    "select public.cast_battle_vote($1,'opaque-key','B','Again',false) as pick",
+    [id],
+  );
+  assert.equal(repeat.rows[0]!.pick, "A");
+  const rows = (
+    await service("select * from public.battle_votes where battle_id=$1", [id])
+  ).rows;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.display_name, null);
+  assert.deepEqual(
+    (await service("select public.battle_counts($1) as counts", [id])).rows[0]!
+      .counts,
+    { A: 1, B: 0 },
+  );
+  await assert.rejects(
+    user("select * from public.battle_votes"),
+    /permission denied/,
+  );
+  await assert.rejects(
+    user("select public.cast_battle_vote($1,'forged','A',null,false)", [id]),
+    /permission denied/,
+  );
+  await assert.rejects(
+    user("update public.battles set voting_mode='public' where id=$1", [id]),
+    /permission denied/,
+  );
+});
+test("public votes require authenticated consent and a bounded display name", async () => {
+  const id = await create("public");
+  await publish(id);
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'guest','B','Guest',false)", [
+      id,
+    ]),
+    /PUBLIC_IDENTITY_REQUIRED/,
+  );
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'user','B',' ',true)", [id]),
+    /PUBLIC_IDENTITY_REQUIRED/,
+  );
+  await service(
+    "select public.cast_battle_vote($1,'user','B','  Style friend  ',true)",
+    [id],
+  );
+  assert.equal(
+    (
+      await service(
+        "select display_name from public.battle_votes where battle_id=$1",
+        [id],
+      )
+    ).rows[0]!.display_name,
+    "Style friend",
+  );
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'invalid','C','Friend',true)", [
+      id,
+    ]),
+    /check constraint/,
+  );
+});
+test("closing and unpublishing stop votes without deleting results or permitting republish", async () => {
+  const id = await create();
+  await publish(id);
+  await service("select public.cast_battle_vote($1,'one','B',null,false)", [
+    id,
+  ]);
+  await service("select public.manage_battle($1,$2,'close')", [owner, id]);
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'two','A',null,false)", [id]),
+    /VOTING_CLOSED/,
+  );
+  await service("select public.manage_battle($1,$2,'unpublish')", [owner, id]);
+  assert.deepEqual(
+    (await service("select public.battle_counts($1) as counts", [id])).rows[0]!
+      .counts,
+    { A: 0, B: 1 },
+  );
+  await assert.rejects(
+    service("select public.manage_battle($1,$2,'publish')", [owner, id]),
+    /INVALID_STATE/,
+  );
+});
+test("reports are deduplicated and private; hidden battles cannot receive votes", async () => {
+  const id = await create();
+  await publish(id);
+  await service("select public.report_battle($1,'network','Privacy concern')", [
+    id,
+  ]);
+  await service("select public.report_battle($1,'network','Other')", [id]);
+  assert.equal(
+    (
+      await service("select * from public.battle_reports where battle_id=$1", [
+        id,
+      ])
+    ).rows.length,
+    1,
+  );
+  await assert.rejects(
+    user("select * from public.battle_reports"),
+    /permission denied/,
+  );
+  await service("update public.battles set status='hidden' where id=$1", [id]);
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'any','A',null,false)", [id]),
+    /VOTING_CLOSED/,
+  );
+  await assert.rejects(
+    service("select public.manage_battle($1,$2,'publish')", [owner, id]),
+    /INVALID_STATE/,
+  );
+});
+test("server rate limits are atomic and clients cannot bypass them", async () => {
+  await service("select public.battle_rate('test-rate',2)");
+  await service("select public.battle_rate('test-rate',2)");
+  await assert.rejects(
+    service("select public.battle_rate('test-rate',2)"),
+    /RATE_LIMIT/,
+  );
+  await assert.rejects(
+    user("select public.battle_rate('forged',9999)"),
+    /permission denied/,
+  );
+  const bucket = (
+    await db.query<{ public: boolean }>(
+      "select public from storage.buckets where id='battle-images'",
+    )
+  ).rows[0]!;
+  assert.equal(bucket.public, false);
+});

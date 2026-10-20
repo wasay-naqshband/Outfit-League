@@ -1,0 +1,195 @@
+import { supabase } from "./supabase";
+import { Platform, Share } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import * as Clipboard from "expo-clipboard";
+import { randomUUID } from "expo-crypto";
+import type { art } from "../data";
+export type BattleView = {
+  id: string;
+  title: string;
+  mode: "anonymous" | "public";
+  status: "draft" | "published" | "closed" | "unpublished" | "hidden";
+  ready: boolean;
+  isOwner: boolean;
+  aUrl: string | null;
+  bUrl: string | null;
+  aSample: keyof typeof art | null;
+  bSample: keyof typeof art | null;
+  aLabel: string;
+  bLabel: string;
+  counts: { A: number; B: number };
+  mine: "A" | "B" | null;
+  voters: { id: number; choice: "A" | "B"; display_name: string }[];
+};
+export type BattleRow = {
+  id: string;
+  title: string;
+  voting_mode: BattleView["mode"];
+  status: BattleView["status"];
+  created_at: string;
+};
+let tokenPromise: Promise<string> | null = null;
+async function browserToken() {
+  if (!tokenPromise)
+    tokenPromise = (async () => {
+      const key = "outfit-league-battle-browser";
+      try {
+        const prior =
+          Platform.OS === "web"
+            ? localStorage.getItem(key)
+            : await SecureStore.getItemAsync(key);
+        if (prior && /^[0-9a-f-]{36}$/i.test(prior)) return prior;
+        const token = randomUUID();
+        if (Platform.OS === "web") localStorage.setItem(key, token);
+        else await SecureStore.setItemAsync(key, token);
+        return token;
+      } catch {
+        return randomUUID();
+      }
+    })();
+  return tokenPromise;
+}
+const messages: Record<string, string> = {
+  UNAUTHORIZED: "Please sign in to continue.",
+  NOT_FOUND: "This battle is unavailable or no longer shared.",
+  INVALID_SOURCE:
+    "Choose two different available images from your own Closet or completed AI looks.",
+  RATE_LIMIT: "Too many requests. Please try again later.",
+  PUBLIC_IDENTITY_REQUIRED:
+    "Sign in, enter a display name and agree to show your name and vote.",
+  VOTING_CLOSED: "Voting is closed for this battle.",
+  INVALID_STATE: "This battle has changed. Refresh to see its current status.",
+  PUBLISH_CONSENT_REQUIRED:
+    "Confirm that these two images can be shared publicly.",
+};
+export async function battleCall<T = BattleView>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  if (!supabase)
+    throw new Error("Battles need a connection. Please try again.");
+  const { data, error } = await supabase.functions.invoke("battles", {
+    body: { ...body, token: await browserToken() },
+  });
+  if (error) {
+    const response =
+      "context" in error && error.context instanceof Response
+        ? await error.context.json().catch(() => null)
+        : null;
+    throw new Error(
+      messages[response?.error] ??
+        "This battle request couldn’t finish. Please try again.",
+    );
+  }
+  if (data?.error) throw new Error(messages[data.error] ?? "Please try again.");
+  return data;
+}
+export async function myBattles(before?: string): Promise<BattleRow[]> {
+  if (!supabase) throw new Error("Please sign in.");
+  let query = supabase
+    .from("battles")
+    .select("id,title,voting_mode,status,created_at")
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(20);
+  if (before) {
+    const [created, id] = before.split("|");
+    query = query.or(
+      `created_at.lt.${created},and(created_at.eq.${created},id.lt.${id})`,
+    );
+  }
+  const { data, error } = await query;
+  if (error) throw new Error("Your battles couldn’t load.");
+  return data;
+}
+export function publicBattleUrl(id: string) {
+  const configured = (process.env.EXPO_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    )
+      return null;
+    return `${url.origin}/battle/${id}`;
+  } catch {
+    return null;
+  }
+}
+export async function copyBattleLink(id: string) {
+  const url = publicBattleUrl(id);
+  if (!url)
+    throw new Error(
+      "A public app address is needed before friends can open this link.",
+    );
+  if (Platform.OS === "web") {
+    if (!navigator.clipboard)
+      throw new Error("Select and copy the voting link shown below.");
+    try {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          navigator.clipboard.writeText(url),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("Clipboard unavailable")),
+              2000,
+            );
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    } catch {
+      throw new Error(
+        "This browser blocked copying. Select and copy the voting link shown below.",
+      );
+    }
+  } else if (!(await Clipboard.setStringAsync(url)))
+    throw new Error("Select and copy the voting link shown below.");
+}
+export async function shareBattleLink(id: string, title: string) {
+  const url = publicBattleUrl(id);
+  if (!url)
+    throw new Error(
+      "A public app address is needed before friends can open this link.",
+    );
+  if (Platform.OS === "web") {
+    if (navigator.share)
+      await navigator.share({
+        title: "Outfit League",
+        text: `${title} — which fit wins?`,
+        url,
+      });
+    else await copyBattleLink(id);
+  } else
+    await Share.share({
+      title: "Outfit League",
+      message: `${title} — which fit wins? ${url}`,
+      url,
+    });
+}
+export async function rememberBattleReturn(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+  try {
+    if (Platform.OS === "web") sessionStorage.setItem("battle-return", id);
+    else await SecureStore.setItemAsync("battle-return", id);
+  } catch {}
+}
+export async function takeBattleReturn() {
+  try {
+    const id =
+      Platform.OS === "web"
+        ? sessionStorage.getItem("battle-return")
+        : await SecureStore.getItemAsync("battle-return");
+    if (Platform.OS === "web") sessionStorage.removeItem("battle-return");
+    else await SecureStore.deleteItemAsync("battle-return");
+    return id && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}

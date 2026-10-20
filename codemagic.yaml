@@ -1,0 +1,65 @@
+# Personal account + M2 uses the free allowance. Start manually; no webhooks.
+# Configure the Apple integration and both target profiles before starting.
+workflows:
+  ios-testflight:
+    name: Outfit League iPhone beta
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: outfit-league-apple
+    environment:
+      node: 24.19.0
+      xcode: 26.4
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.outfitleague.app
+      vars:
+        CI: "1"
+        EXPO_NO_TELEMETRY: "1"
+        EXPO_PUBLIC_APP_URL: https://chutni.store
+        EXPO_PUBLIC_SUPABASE_URL: https://xxrylsmiaehgnljyzguh.supabase.co
+        EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_HecThul_Ql3yp1tmG3_fVA_JYq94elU
+    scripts:
+      - name: Install locked dependencies
+        script: |
+          set -eu
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Check source
+        script: |
+          set -eu
+          pnpm typecheck
+          pnpm test
+      - name: Generate iOS project and install pods
+        script: |
+          set -eu
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const config = JSON.parse(fs.readFileSync('app.json', 'utf8'));
+          const number = Number(process.env.PROJECT_BUILD_NUMBER);
+          if (!Number.isInteger(number) || number < 1 || number > 9899) {
+            throw new Error('Missing/out-of-range Codemagic project build number');
+          }
+          config.expo.ios.buildNumber = String(100 + number);
+          fs.writeFileSync('app.json', JSON.stringify(config, null, 2) + '\n');
+          NODE
+          pnpm exec expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Apply signing profiles for app and share extension
+        script: |
+          set -eu
+          xcode-project use-profiles
+      - name: Archive and export signed iPhone app
+        script: |
+          set -eu
+          xcode-project build-ipa --workspace ios/OutfitLeague.xcworkspace --scheme OutfitLeague
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false

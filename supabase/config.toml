@@ -1,0 +1,31 @@
+project_id = "outfit-league"
+
+[auth]
+site_url = "https://chutni.store"
+additional_redirect_urls = [
+  "http://localhost:8083/auth-callback",
+  "http://localhost:8083/auth-callback?recovery=1",
+  "http://localhost:8081/auth-callback",
+  "http://localhost:8081/auth-callback?recovery=1",
+  "outfitleague://auth-callback",
+  "outfitleague://auth-callback?recovery=1",
+  "https://chutni.store/auth-callback",
+  "https://chutni.store/auth-callback?recovery=1",
+  "https://willowy-bienenstitch-cd3e0f.netlify.app/auth-callback",
+  "https://willowy-bienenstitch-cd3e0f.netlify.app/auth-callback?recovery=1"
+]
+
+[functions.tryon]
+verify_jwt = false
+
+[functions.battles]
+verify_jwt = false
+
+[functions.shopping]
+verify_jwt = false
+
+[functions.account]
+verify_jwt = false
+
+# Authentication is explicitly verified with auth.getUser inside the function.
+# This supports modern Supabase publishable keys as well as legacy JWT anon keys.

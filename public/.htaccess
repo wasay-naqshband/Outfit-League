@@ -1,0 +1,13 @@
+# Hostinger Apache/LiteSpeed: serve Expo's SPA for direct battle/auth routes.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]
+</IfModule>
+<IfModule mod_headers.c>
+<FilesMatch "^index\.html$">
+Header set Cache-Control "no-cache"
+</FilesMatch>
+Header always set X-Content-Type-Options "nosniff"
+</IfModule>

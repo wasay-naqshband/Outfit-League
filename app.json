@@ -1,0 +1,81 @@
+{
+  "expo": {
+    "name": "Outfit League",
+    "slug": "outfit-league",
+    "scheme": "outfitleague",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "config": { "usesNonExemptEncryption": false },
+      "bundleIdentifier": "com.outfitleague.app"
+    },
+    "android": {
+      "package": "com.outfitleague.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Outfit League"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-sharing",
+        {
+          "ios": {
+            "enabled": true,
+            "appGroupId": "group.com.outfitleague.app",
+            "activationRule": {
+              "supportsText": true,
+              "supportsWebUrlWithMaxCount": 1,
+              "supportsImageWithMaxCount": 1
+            }
+          },
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": ["text/plain", "image/*"]
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose your own photos for private outfit previews.",
+          "cameraPermission": "Take a photo for your private outfit preview.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "expo-sharing-extension",
+                  "bundleIdentifier": "com.outfitleague.app.expo-sharing-extension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.outfitleague.app"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "9815ed89-c0d6-45eb-aec9-b4c8e3c2a7c2"
+      }
+    },
+    "owner": "wasaynaqshband"
+  }
+}
