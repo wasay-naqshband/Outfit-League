@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import Feather from "@expo/vector-icons/Feather";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,7 +39,9 @@ export type IconName =
   | "user"
   | "image"
   | "x"
-  | "mail";
+  | "mail"
+  | "google"
+  | "apple";
 export function Icon({
   name,
   color = c.ink,
@@ -48,6 +51,8 @@ export function Icon({
   color?: string;
   size?: number;
 }) {
+  if (name === "google" || name === "apple")
+    return <FontAwesome name={name} size={size} color={color} />;
   if (name === "hanger" || name === "sparkles")
     return (
       <MaterialCommunityIcons

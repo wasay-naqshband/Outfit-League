@@ -13,6 +13,7 @@ import { supabase } from "../src/lib/supabase";
 import { colors as c, fonts } from "../src/theme";
 import { authRedirect } from "../src/lib/auth-links";
 import { takeBattleReturn } from "../src/lib/battles";
+import { startOAuth, type SocialProvider } from "../src/lib/oauth";
 
 export default function Auth() {
   const [mode, setMode] = useState("Sign in");
@@ -20,6 +21,20 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  async function social(provider: SocialProvider) {
+    if (!supabase || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await startOAuth(provider);
+    } catch {
+      setMessage(
+        `${provider === "google" ? "Google" : "Apple"} sign-in isn’t available yet. Please use email or try again later.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit() {
     if (!supabase || busy) return;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -103,6 +118,36 @@ export default function Auth() {
               in demo mode; you can browse without an account.
             </Body>
           )}
+          {mode !== "Reset" && (
+            <View style={{ gap: 10 }}>
+              <Button
+                secondary
+                icon="google"
+                title="Continue with Google"
+                onPress={() => void social("google")}
+                disabled={!supabase || busy}
+              />
+              <Button
+                secondary
+                icon="apple"
+                title="Continue with Apple"
+                onPress={() => void social("apple")}
+                disabled={!supabase || busy}
+              />
+              <View
+                accessibilityElementsHidden
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={{ flex: 1, height: 1, backgroundColor: c.inactive }}
+                />
+                <Body style={{ fontSize: 13 }}>or use email</Body>
+                <View
+                  style={{ flex: 1, height: 1, backgroundColor: c.inactive }}
+                />
+              </View>
+            </View>
+          )}
           <TextInput
             accessibilityLabel="Email address"
             placeholder="Email address"
@@ -156,8 +201,8 @@ export default function Auth() {
             onPress={() => router.replace("/(tabs)")}
           />
           <Body style={{ fontSize: 13 }}>
-            Apple sign-in is not configured. No account is created when browsing
-            the demo.
+            Google, Apple and email accounts use the same private Outfit League
+            profile. No account is created when browsing the demo.
           </Body>
         </View>
       </Page>

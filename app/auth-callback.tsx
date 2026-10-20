@@ -13,10 +13,16 @@ import {
 import { supabase } from "../src/lib/supabase";
 import { takeBattleReturn } from "../src/lib/battles";
 export default function AuthCallback() {
-  const params = useLocalSearchParams<{ code?: string; recovery?: string }>();
+  const params = useLocalSearchParams<{
+    code?: string;
+    recovery?: string;
+    next?: string;
+  }>();
   const url = Linking.useURL();
   const [error, setError] = useState("");
-  const exchange = useRef<Promise<boolean> | null>(null);
+  const exchange = useRef<
+    Promise<{ recovery: boolean; next: string | null | undefined }> | undefined
+  >(undefined);
   useEffect(() => {
     let active = true;
     async function complete() {
@@ -29,6 +35,7 @@ export default function AuthCallback() {
         params.recovery === "1" ||
         parsed?.searchParams.get("recovery") === "1" ||
         fragment.get("type") === "recovery";
+      const next = params.next ?? parsed?.searchParams.get("next");
       let authError;
       if (code)
         ({ error: authError } =
@@ -40,12 +47,12 @@ export default function AuthCallback() {
         }));
       else throw new Error("Missing confirmation");
       if (authError) throw authError;
-      return recovery;
+      return { recovery, next };
     }
     // The same code must not be exchanged twice during development effect replay.
     exchange.current ??= complete();
     void exchange.current
-      .then(async (recovery) => {
+      .then(async ({ recovery, next }) => {
         const battle = recovery ? null : await takeBattleReturn();
         if (active) {
           if (battle)
@@ -53,7 +60,14 @@ export default function AuthCallback() {
               pathname: "/battle/[id]",
               params: { id: battle },
             });
-          else router.replace(recovery ? "/reset-password" : "/(tabs)");
+          else
+            router.replace(
+              recovery
+                ? "/reset-password"
+                : next === "account"
+                  ? "/account"
+                  : "/(tabs)",
+            );
         }
       })
       .catch(() => {

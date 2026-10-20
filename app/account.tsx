@@ -6,6 +6,7 @@ import { useApp } from "../src/lib/state";
 import { supabase } from "../src/lib/supabase";
 import { accountAction } from "../src/lib/account";
 import { colors, fonts } from "../src/theme";
+import { startOAuth, type SocialProvider } from "../src/lib/oauth";
 export default function Account() {
   const { session } = useApp();
   const [name, setName] = useState(""),
@@ -14,6 +15,9 @@ export default function Account() {
     [confirmation, setConfirmation] = useState(""),
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false);
+  const provider = session?.user.app_metadata.provider as
+    SocialProvider | "email" | undefined;
+  const socialProvider = provider === "google" || provider === "apple";
   useEffect(() => {
     let live = true;
     if (session)
@@ -57,20 +61,35 @@ export default function Account() {
         : "Display name saved. Existing public votes keep the name you approved when voting.",
     );
   }
+  async function reauthenticate(provider: SocialProvider) {
+    setBusy(true);
+    setMessage("");
+    try {
+      await startOAuth(provider, "account");
+    } catch {
+      setMessage(
+        `${provider === "google" ? "Google" : "Apple"} sign-in isn’t available yet. Please try again later.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   async function remove() {
     if (!supabase || !session?.user.email || busy) return;
     setBusy(true);
     setMessage("");
     try {
-      const auth = await supabase.auth.signInWithPassword({
-        email: session.user.email,
-        password,
-      });
-      setPassword("");
-      if (auth.error)
-        throw new Error(
-          "Your password could not be verified. No deletion has started.",
-        );
+      if (!socialProvider) {
+        const auth = await supabase.auth.signInWithPassword({
+          email: session.user.email,
+          password,
+        });
+        setPassword("");
+        if (auth.error)
+          throw new Error(
+            "Your password could not be verified. No deletion has started.",
+          );
+      }
       await accountAction({ action: "delete", confirmation });
       await supabase.auth.signOut({ scope: "local" });
       router.replace("/account-deleted");
@@ -131,9 +150,19 @@ export default function Account() {
             ) : (
               <>
                 <Body>
-                  Type DELETE and enter your password to confirm permanent
-                  deletion. Your password is used only for Supabase sign-in.
+                  {socialProvider
+                    ? `Sign in again with ${provider === "google" ? "Google" : "Apple"}, return here, then type DELETE to confirm permanent deletion.`
+                    : "Type DELETE and enter your password to confirm permanent deletion. Your password is used only for Supabase sign-in."}
                 </Body>
+                {socialProvider && (
+                  <Button
+                    secondary
+                    icon={provider}
+                    title={`Sign in again with ${provider === "google" ? "Google" : "Apple"}`}
+                    disabled={busy}
+                    onPress={() => void reauthenticate(provider)}
+                  />
+                )}
                 <TextInput
                   accessibilityLabel="Type DELETE to confirm"
                   value={confirmation}
@@ -142,17 +171,23 @@ export default function Account() {
                   autoCorrect={false}
                   style={field}
                 />
-                <TextInput
-                  accessibilityLabel="Confirm your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoComplete="current-password"
-                  style={field}
-                />
+                {!socialProvider && (
+                  <TextInput
+                    accessibilityLabel="Confirm your password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    autoComplete="current-password"
+                    style={field}
+                  />
+                )}
                 <Button
                   title={busy ? "Submitting…" : "Permanently delete my account"}
-                  disabled={busy || confirmation !== "DELETE" || !password}
+                  disabled={
+                    busy ||
+                    confirmation !== "DELETE" ||
+                    (!socialProvider && !password)
+                  }
                   onPress={() => void remove()}
                 />
                 <Button

@@ -34,11 +34,11 @@ To rebuild:
 
 Copy .env.example to .env and fill in your Supabase project URL and public anonymous/publishable client key. Never put a service-role key in this app. Restart Expo after changing environment values.
 
-Email authentication, email confirmation and local redirect destinations are configured on the connected project. Sign-in, sign-up, reset-email requests, sign-out, session restoration and native secure session storage are implemented. A checkout without connection values still supports guest demo browsing and explains why auth submission is unavailable.
+Email authentication, email confirmation and local redirect destinations are configured on the connected project. Google and Apple OAuth buttons, callback handling, session restoration and social-account reauthentication for deletion are implemented. The providers remain disabled until their credentials are added in Supabase; both use `https://xxrylsmiaehgnljyzguh.supabase.co/auth/v1/callback`. A checkout without connection values still supports guest demo browsing and explains why auth submission is unavailable.
 
 Email-confirmation and password-recovery routes, account profiles, private data tables and ownership policies are implemented. The supplied Supabase project has been connected and deployed. The production browser callback and battle return route are verified; native device confirmation/recovery tests remain. See MILESTONE_2_SETUP.md.
 
-Apple authentication is omitted until configured. No account is needed to review the demo.
+No account is needed to review the demo.
 
 ## Structure
 

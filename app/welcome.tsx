@@ -149,7 +149,7 @@ export default function Welcome() {
             />
             <Button
               secondary
-              title="Continue with email"
+              title="Sign in or create account"
               onPress={() => router.push("/auth")}
             />
             <Text
