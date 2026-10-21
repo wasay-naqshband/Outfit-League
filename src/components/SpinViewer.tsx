@@ -1,27 +1,35 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, View } from "react-native";
+import { Animated, PanResponder, Pressable, View } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Icon } from "./ui";
-import { colors, gradients, shadow } from "../theme";
+import { colors, gradients } from "../theme";
 
 const MAX_ZOOM = 3;
+const TAP = 8;
 
-// A turntable video: it loops on its own; drag pauses it and scrubs (one card
-// width = one full turn); pinch or double-tap zooms. `start` skips the intro.
+// Full-screen turntable video (shown in a Modal, so no page scroll or iOS
+// back-swipe can steal the drag): it loops on its own; drag pauses it and
+// scrubs (one screen width = one full turn); pinch or double-tap zooms.
+// `start` skips the intro.
 export function SpinViewer({
   video,
   start,
-  height = 440,
+  onClose,
 }: {
   video: string;
   start: number;
-  height?: number;
+  onClose: () => void;
 }) {
-  const player = useVideoPlayer(video, (p) => {
+  // Signed links refresh on refetch; keep the first so the player never reloads.
+  const [source] = useState(video);
+  const player = useVideoPlayer(source, (p) => {
     p.muted = true;
+    p.seekTolerance = { toleranceBefore: 0.05, toleranceAfter: 0.05 };
     p.play();
   });
+  const insets = useSafeAreaInsets();
   const [zoomed, setZoomed] = useState(false);
   const width = useRef(1);
   const scale = useRef(new Animated.Value(1)).current;
@@ -59,12 +67,10 @@ export function SpinViewer({
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
-          const now = Date.now();
-          if (now - g.current.tap < 300) zoomTo(g.current.scale > 1 ? 1 : 2);
-          g.current.tap = now;
           g.current.pinch = 0;
           g.current.from = player.currentTime;
           player.pause();
+          player.scrubbingModeOptions = { scrubbingModeEnabled: true };
         },
         onPanResponderMove: (e, s) => {
           const [a, b] = e.nativeEvent.touches;
@@ -83,8 +89,18 @@ export function SpinViewer({
           }
         },
         onPanResponderRelease: (_, s) => {
+          player.scrubbingModeOptions = { scrubbingModeEnabled: false };
           if (g.current.pinch)
             return zoomTo(g.current.scale < 1.1 ? 1 : g.current.scale);
+          // Only a still, quick touch counts as a tap; drags never zoom.
+          if (Math.abs(s.dx) < TAP && Math.abs(s.dy) < TAP) {
+            const now = Date.now();
+            if (now - g.current.tap < 300) {
+              g.current.tap = 0;
+              return zoomTo(g.current.scale > 1 ? 1 : 2);
+            }
+            g.current.tap = now;
+          }
           if (g.current.scale > 1)
             ((g.current.x += s.dx), (g.current.y += s.dy));
         },
@@ -93,44 +109,54 @@ export function SpinViewer({
   );
 
   return (
-    <View style={{ height, borderRadius: 32, ...shadow() }}>
-      <LinearGradient
-        colors={gradients.lavender}
+    <LinearGradient colors={gradients.lavender} style={{ flex: 1 }}>
+      <Animated.View
+        {...responder.panHandlers}
+        onLayout={(e) => (width.current = e.nativeEvent.layout.width)}
         style={{
           flex: 1,
-          borderRadius: 32,
-          borderWidth: 4,
-          borderColor: colors.white,
-          overflow: "hidden",
+          transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale }],
         }}
       >
-        <Animated.View
-          {...responder.panHandlers}
-          onLayout={(e) => (width.current = e.nativeEvent.layout.width)}
+        <VideoView
+          player={player}
+          nativeControls={false}
+          contentFit="contain"
+          pointerEvents="none"
+          style={{ width: "100%", height: "100%" }}
+          accessibilityLabel="AI 360° preview video"
+        />
+      </Animated.View>
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          left: 20,
+          right: 20,
+          top: insets.top + 12,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <Pressable
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close 360° view"
           style={{
-            flex: 1,
-            transform: [
-              { translateX: pan.x },
-              { translateY: pan.y },
-              { scale },
-            ],
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.white,
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          <VideoView
-            player={player}
-            nativeControls={false}
-            contentFit="contain"
-            pointerEvents="none"
-            style={{ width: "100%", height: "100%" }}
-            accessibilityLabel="AI 360° preview video"
-          />
-        </Animated.View>
+          <Icon name="x" size={20} />
+        </Pressable>
         <View
           pointerEvents="none"
           style={{
-            position: "absolute",
-            left: 14,
-            top: 14,
             backgroundColor: colors.white,
             padding: 10,
             borderRadius: 17,
@@ -143,7 +169,7 @@ export function SpinViewer({
             {zoomed ? "Double-tap to reset" : "Drag to turn · pinch to zoom"}
           </Body>
         </View>
-      </LinearGradient>
-    </View>
+      </View>
+    </LinearGradient>
   );
 }

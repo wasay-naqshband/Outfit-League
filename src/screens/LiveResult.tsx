@@ -38,6 +38,9 @@ export default function LiveResult({ id }: { id: string }) {
   const uri = segment === "Before" ? view?.beforeUrl : view?.afterUrl;
   const spin = view?.spin;
   const spinStart = useRef(0);
+  const [spinOpen, setSpinOpen] = useState(true);
+  // Opening the 360° tab shows the full-screen viewer again.
+  useEffect(() => setSpinOpen(true), [segment]);
   useEffect(() => setImageError(false), [uri]);
   useEffect(() => {
     if (view && view.job.status !== "completed")
@@ -116,33 +119,35 @@ export default function LiveResult({ id }: { id: string }) {
             <LoadingSkeleton />
           ) : segment === "360°" ? (
             <>
-              {spin?.status === "completed" && spin.sheetUrl ? (
-                <SpinViewer video={spin.sheetUrl} start={spin.start} />
+              <LinearGradient
+                colors={gradients.lavender}
+                style={{
+                  height: 359,
+                  borderRadius: 32,
+                  borderWidth: 4,
+                  borderColor: colors.white,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 16,
+                  padding: 24,
+                }}
+              >
+                <Icon name="refresh-cw" size={48} />
+                <Body style={{ textAlign: "center" }}>
+                  {spin?.status === "failed"
+                    ? friendlyError(
+                        new Error(spin.error ?? "GENERATION_FAILED"),
+                      )
+                    : "See this look from the front, sides and back."}
+                </Body>
+              </LinearGradient>
+              {spin?.status === "completed" ? (
+                <Button
+                  title="Open 360° view"
+                  icon="refresh-cw"
+                  onPress={() => setSpinOpen(true)}
+                />
               ) : (
-                <LinearGradient
-                  colors={gradients.lavender}
-                  style={{
-                    height: 359,
-                    borderRadius: 32,
-                    borderWidth: 4,
-                    borderColor: colors.white,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 16,
-                    padding: 24,
-                  }}
-                >
-                  <Icon name="refresh-cw" size={48} />
-                  <Body style={{ textAlign: "center" }}>
-                    {spin?.status === "failed"
-                      ? friendlyError(
-                          new Error(spin.error ?? "GENERATION_FAILED"),
-                        )
-                      : "See this look from the front, sides and back."}
-                  </Body>
-                </LinearGradient>
-              )}
-              {spin?.status !== "completed" &&
                 spin?.status !== "processing" && (
                   <Button
                     title={busy ? "Please wait…" : "Make 360° view · 1 credit"}
@@ -151,7 +156,8 @@ export default function LiveResult({ id }: { id: string }) {
                       void makeSpin();
                     }}
                   />
-                )}
+                )
+              )}
               {!!error && (
                 <Body
                   style={{
@@ -299,9 +305,7 @@ export default function LiveResult({ id }: { id: string }) {
       </Page>
       {/* Full-screen wait while the 360° video is made; closing keeps it cooking. */}
       <Modal
-        visible={
-          segment === "360°" && (busy || spin?.status === "processing")
-        }
+        visible={segment === "360°" && (busy || spin?.status === "processing")}
         animationType="fade"
         statusBarTranslucent
       >
@@ -312,6 +316,25 @@ export default function LiveResult({ id }: { id: string }) {
           startedAt={spinStart.current || undefined}
           onClose={() => setSegment("After")}
         />
+      </Modal>
+      <Modal
+        visible={
+          segment === "360°" &&
+          spinOpen &&
+          spin?.status === "completed" &&
+          !!spin.sheetUrl
+        }
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setSpinOpen(false)}
+      >
+        {spin?.sheetUrl && (
+          <SpinViewer
+            video={spin.sheetUrl}
+            start={spin.start}
+            onClose={() => setSpinOpen(false)}
+          />
+        )}
       </Modal>
       <FloatingTabBar active="Try On" />
     </View>

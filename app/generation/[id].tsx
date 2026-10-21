@@ -62,9 +62,7 @@ export default function Generation() {
           <>
             <Heading size={28}>Let’s try another fit.</Heading>
             <Body>
-              {friendlyError(
-                new Error(job?.error_code ?? "GENERATION_FAILED"),
-              )}
+              {friendlyError(new Error(job?.error_code ?? "GENERATION_FAILED"))}
             </Body>
             <Button
               title="Choose new photos"
