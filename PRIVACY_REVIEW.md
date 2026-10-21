@@ -16,6 +16,8 @@ Your session is persisted on your device so you can remain signed in. The native
 
 Only an explicit Generate action, with your chosen person/garment images and try-on consent, sends those images to the configured AI provider. The current provider is Genlook. We request one-day product/output storage using the provider's API options and copy completed results into our private storage. This request is not a guarantee of deletion from every provider system or backup. Provider handling is subject to its own terms and retention practices.
 
+A separate explicit "Make 360° view" action on a completed look sends that look's AI result and garment photo to Google's Gemini API (paid tier) to create a four-angle preview, which is stored privately with the look and deleted with it. Google's paid-tier API terms govern its handling of those requests.
+
 Browsing, saving a look or searching the shopping catalog does not automatically submit photos to AI. Only upload images you have permission to use. AI results are generated visuals and may be inaccurate; they are not a measurement or a guarantee of fit.
 
 ## Battles and votes
@@ -30,7 +32,7 @@ Reports and moderation records are used to review abuse. App rate limiting uses 
 
 Current shopping samples are labeled illustrations with illustrative prices and no purchase links. A first retailer partnership is pending; it is not yet a live feed. Future approved retailer links may record the product and whether an affiliate destination was used without attaching your account identity or private photos to that click record. Retailer sites handle their own checkout and privacy practices. Any provider/retailer changes require this notice to be reviewed again.
 
-Supabase provides authentication, data/storage and server functions. Netlify hosts the web application. Genlook processes explicitly requested AI previews. Infrastructure providers may process technical request information needed to deliver their services. No external analytics sink, payment provider or credit-purchase service is currently connected in the app.
+Supabase provides authentication, data/storage and server functions. Netlify hosts the web application. Genlook processes explicitly requested AI previews, and Google Gemini processes explicitly requested 360° views. Infrastructure providers may process technical request information needed to deliver their services. No external analytics sink, payment provider or credit-purchase service is currently connected in the app.
 
 ## Retention and removal
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -17,9 +17,10 @@ import {
   StickerBadge,
 } from "../components/ui";
 import { FloatingTabBar } from "../components/FloatingTabBar";
+import { SpinViewer } from "../components/SpinViewer";
 import { useApp } from "../lib/state";
 import { useJob } from "../lib/queries";
-import { saveLook } from "../lib/tryon-api";
+import { saveLook, startSpin } from "../lib/tryon-api";
 import { sharePreview } from "../lib/share-image";
 import { friendlyError } from "../types/tryon";
 import { colors, gradients, shadow } from "../theme";
@@ -34,6 +35,7 @@ export default function LiveResult({ id }: { id: string }) {
   const [imageError, setImageError] = useState(false);
   const view = query.data;
   const uri = segment === "Before" ? view?.beforeUrl : view?.afterUrl;
+  const spin = view?.spin;
   useEffect(() => setImageError(false), [uri]);
   useEffect(() => {
     if (view && view.job.status !== "completed")
@@ -47,6 +49,22 @@ export default function LiveResult({ id }: { id: string }) {
       await saveLook(view.look.id, !view.look.saved);
       await query.refetch();
       await client.invalidateQueries({ queryKey: ["tryon-history"] });
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function makeSpin() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      client.setQueryData(
+        ["tryon-job", session?.user.id, id],
+        await startSpin(id),
+      );
+      await client.invalidateQueries({ queryKey: ["wallet"] });
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -73,7 +91,7 @@ export default function LiveResult({ id }: { id: string }) {
       <Page>
         <FlatHeader title="Your look">
           <SegmentedControl
-            options={["Before", "After"]}
+            options={["Before", "After", "360°"]}
             selected={segment}
             onChange={setSegment}
           />
@@ -93,6 +111,71 @@ export default function LiveResult({ id }: { id: string }) {
             />
           ) : !view ? (
             <LoadingSkeleton />
+          ) : segment === "360°" ? (
+            <>
+              {spin?.status === "completed" && spin.sheetUrl ? (
+                <SpinViewer sheet={spin.sheetUrl} angles={spin.angles} />
+              ) : (
+                <LinearGradient
+                  colors={gradients.lavender}
+                  style={{
+                    height: 359,
+                    borderRadius: 32,
+                    borderWidth: 4,
+                    borderColor: colors.white,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 16,
+                    padding: 24,
+                  }}
+                >
+                  <Icon name="refresh-cw" size={48} />
+                  {spin?.status === "processing" ? (
+                    <>
+                      <ActivityIndicator color={colors.ink} size="large" />
+                      <Body style={{ textAlign: "center" }}>
+                        Making your 360° view. This takes about 30 seconds.
+                      </Body>
+                    </>
+                  ) : (
+                    <Body style={{ textAlign: "center" }}>
+                      {spin?.status === "failed"
+                        ? friendlyError(
+                            new Error(spin.error ?? "GENERATION_FAILED"),
+                          )
+                        : "See this look from the front, sides and back."}
+                    </Body>
+                  )}
+                </LinearGradient>
+              )}
+              {spin?.status !== "completed" &&
+                spin?.status !== "processing" && (
+                  <Button
+                    title={busy ? "Please wait…" : "Make 360° view · 1 credit"}
+                    icon="sparkles"
+                    onPress={() => {
+                      void makeSpin();
+                    }}
+                  />
+                )}
+              {!!error && (
+                <Body
+                  style={{
+                    padding: 16,
+                    borderRadius: 18,
+                    backgroundColor: colors.chip,
+                  }}
+                >
+                  {error}
+                </Body>
+              )}
+              <Body style={{ fontSize: 13 }}>
+                Your try-on and garment photo are sent to Google Gemini to
+                create the other angles. Sides and back are AI guesses, not
+                photos. Failed views refund the credit automatically. Deleting
+                this look deletes its 360° view.
+              </Body>
+            </>
           ) : (
             <>
               <View style={{ height: 359, borderRadius: 32, ...shadow() }}>

@@ -42,7 +42,8 @@ export type IconName =
   | "mail"
   | "google"
   | "apple"
-  | "settings";
+  | "settings"
+  | "refresh-cw";
 export function Icon({
   name,
   color = c.ink,

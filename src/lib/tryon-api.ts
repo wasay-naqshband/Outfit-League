@@ -55,6 +55,8 @@ export async function fetchJob(id: string) {
     );
   return view;
 }
+export const startSpin = (id: string) =>
+  callTryOn<JobView>({ action: "spin", id });
 export async function fetchWallet(): Promise<Wallet> {
   if (!supabase) throw new Error("UNAUTHORIZED");
   const { data, error } = await supabase

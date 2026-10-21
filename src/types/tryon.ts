@@ -16,6 +16,12 @@ export type JobView = {
   beforeUrl: string | null;
   afterUrl: string | null;
   look: { id: string; saved: boolean } | null;
+  spin: {
+    status: "processing" | "completed" | "failed";
+    error: string | null;
+    sheetUrl: string | null;
+    angles: number;
+  } | null;
 };
 export type Wallet = { available: number; reserved: number };
 export type LocalPhoto = {
@@ -27,6 +33,7 @@ export type LocalPhoto = {
 };
 export type TryOnConfig = {
   enabled: boolean;
+  spinEnabled?: boolean;
   provider: string;
   consentVersion: string;
   maxImageBytes: number;
@@ -57,6 +64,8 @@ export const errorMessages: Record<string, string> = {
   INVALID_RESULT:
     "The preview couldn’t be used. Your credit has been returned.",
   NOT_FOUND: "This look is no longer available.",
+  PROVIDER_BUSY:
+    "The AI service is busy right now. Your credit has been returned — try again in a minute.",
 };
 export const friendlyError = (error: unknown) =>
   error instanceof Error

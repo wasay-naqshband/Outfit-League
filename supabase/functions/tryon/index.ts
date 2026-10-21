@@ -11,6 +11,7 @@ import {
 } from "../_shared/domain.ts";
 import { FashnProvider, GenlookProvider } from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
+import { generateSheet, SPIN_ANGLES } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 
 const env = (name: string) => Deno.env.get(name) ?? "";
@@ -26,6 +27,17 @@ const providers = {
 const provider = providers[providerName];
 const providerKey = (name: string) =>
   env(name === "Genlook" ? "GENLOOK_API_KEY" : "FASHN_API_KEY");
+const spinEnabled = () => !!env("GEMINI_API_KEY");
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
+type Spin = {
+  id: string;
+  owner_id: string;
+  job_id: string;
+  sheet_asset_id: string | null;
+  status: string;
+  error_code: string | null;
+  created_at: string;
+};
 const enabled = () =>
   env("LIVE_TRYON_ENABLED") === "true" && !!providerKey(providerName);
 type Job = {
@@ -204,7 +216,23 @@ async function syncJob(job: Job) {
   }
 }
 async function resultView(job: Job) {
-  const ids = [job.person_asset_id, job.result_asset_id].filter(Boolean);
+  let spin: Spin | null = checked(
+    await db.from("spin_views").select("*").eq("job_id", job.id).maybeSingle(),
+  );
+  // The worker died or timed out: refund instead of leaving the credit reserved.
+  if (
+    spin?.status === "processing" &&
+    Date.parse(spin.created_at) < Date.now() - 5 * 60000
+  )
+    spin = await rpc("finish_spin", {
+      p_spin: spin.id,
+      p_error: "GENERATION_TIMEOUT",
+    });
+  const ids = [
+    job.person_asset_id,
+    job.result_asset_id,
+    spin?.sheet_asset_id,
+  ].filter(Boolean);
   const assets: Asset[] = required(
     await db.from("private_assets").select("*").in("id", ids),
   );
@@ -225,14 +253,25 @@ async function resultView(job: Job) {
     beforeUrl: signed.person ?? null,
     afterUrl: signed.result ?? null,
     look,
+    spin: spin && {
+      status: spin.status,
+      error: spin.error_code,
+      sheetUrl: signed.spin ?? null,
+      angles: SPIN_ANGLES,
+    },
   };
 }
 async function removeJob(job: Job) {
   if (!terminal(job.status)) throw new Error("ACTIVE_JOB");
+  const spin: Spin | null = checked(
+    await db.from("spin_views").select("*").eq("job_id", job.id).maybeSingle(),
+  );
+  if (spin?.status === "processing") throw new Error("ACTIVE_JOB");
   const ids = [
     job.person_asset_id,
     job.garment_asset_id,
     job.result_asset_id,
+    spin?.sheet_asset_id,
   ].filter(Boolean);
   const assets: Asset[] = required(
     await db.from("private_assets").select("*").in("id", ids),
@@ -252,6 +291,46 @@ async function removeJob(job: Job) {
       .in("id", ids)
       .eq("owner_id", job.owner_id),
   );
+}
+async function makeSpin(job: Job, spin: Spin) {
+  try {
+    const [person, garment] = await Promise.all([
+      readInput(job.result_asset_id!, job.owner_id),
+      readInput(job.garment_asset_id, job.owner_id),
+    ]);
+    const bytes = await normalizeResult(
+      await generateSheet(env("GEMINI_API_KEY"), person, garment),
+    );
+    const id = crypto.randomUUID(),
+      path = job.owner_id + "/" + id + ".jpg";
+    const upload = await bucket.upload(path, bytes, {
+      contentType: "image/jpeg",
+      upsert: false,
+    });
+    if (upload.error) throw new Error("STORE_RESULT_FAILED");
+    checked(
+      await db.from("private_assets").insert({
+        id,
+        owner_id: job.owner_id,
+        kind: "spin",
+        path,
+        byte_size: bytes.length,
+        content_type: "image/jpeg",
+      }),
+    );
+    await rpc("finish_spin", { p_spin: spin.id, p_sheet: id });
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      ["PROVIDER_BUSY", "INVALID_RESULT", "IMAGE_DIMENSIONS"].includes(
+        error.message,
+      )
+        ? error.message
+        : "GENERATION_FAILED";
+    await rpc("finish_spin", { p_spin: spin.id, p_error: code }).catch(
+      () => {},
+    );
+  }
 }
 function cors(req: Request) {
   const origin = req.headers.get("origin");
@@ -329,6 +408,7 @@ Deno.serve(async (req) => {
           .from("private_assets")
           .select("*")
           .lt("created_at", new Date(Date.now() - 86400000).toISOString())
+          .neq("kind", "spin")
           .limit(50),
       );
       for (const asset of old) {
@@ -365,6 +445,7 @@ Deno.serve(async (req) => {
     if (body.action === "config")
       return reply({
         enabled: enabled(),
+        spinEnabled: spinEnabled(),
         provider: providerName,
         consentVersion: CONSENT_VERSION,
         maxImageBytes: MAX_IMAGE_BYTES,
@@ -445,6 +526,17 @@ Deno.serve(async (req) => {
       const job = await ownedJob(body.id, owner);
       await syncJob(job);
       return reply(await resultView(await ownedJob(job.id, owner)));
+    }
+    if (body.action === "spin") {
+      if (!spinEnabled()) throw new Error("PROVIDER_NOT_CONFIGURED");
+      const job = await ownedJob(body.id, owner);
+      const reserved = await rpc("reserve_spin", {
+        p_owner: owner,
+        p_job: job.id,
+      });
+      // Generation outlives this request; the app polls "status" for the result.
+      if (reserved.created) EdgeRuntime.waitUntil(makeSpin(job, reserved.spin));
+      return reply(await resultView(job));
     }
     if (body.action === "delete") {
       await removeJob(await ownedJob(body.id, owner));

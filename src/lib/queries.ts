@@ -41,7 +41,9 @@ export function useJob(id?: string) {
     staleTime: 0,
     retry: 2,
     refetchInterval: (query) =>
-      !query.state.data || !isTerminal(query.state.data.job.status)
+      !query.state.data ||
+      !isTerminal(query.state.data.job.status) ||
+      query.state.data.spin?.status === "processing"
         ? 4000
         : 240000,
   });
