@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { analytics } from "../../src/lib/analytics";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Modal, Platform, Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { randomUUID } from "expo-crypto";
@@ -17,6 +17,10 @@ import {
   SettingsButton,
 } from "../../src/components/ui";
 import { PhotoPickerCard } from "../../src/components/PhotoPickerCard";
+import {
+  CookingLoader,
+  TRYON_MESSAGES,
+} from "../../src/components/CookingLoader";
 import { getOutfit } from "../../src/data";
 import { colors, fonts, gradients } from "../../src/theme";
 import { useApp } from "../../src/lib/state";
@@ -48,6 +52,7 @@ export default function TryOn() {
   const [error, setError] = useState("");
   const attempt = useRef<Attempt | null>(null);
   const submitted = useRef(false);
+  const startedAt = useRef(0);
   const active = history.data?.find((job) => !isTerminal(job.status));
   async function discardAttempt() {
     const current = attempt.current;
@@ -107,6 +112,7 @@ export default function TryOn() {
     }
     if (!config.data?.enabled) return;
     submitted.current = true;
+    startedAt.current = Date.now();
     setBusy(true);
     setError("");
     const current = attempt.current ?? { key: randomUUID() };
@@ -138,7 +144,7 @@ export default function TryOn() {
       setConsent(false);
       router.push({
         pathname: "/generation/[id]",
-        params: { id: result.job.id },
+        params: { id: result.job.id, t: String(startedAt.current) },
       });
     } catch (e) {
       setError(friendlyError(e));
@@ -152,6 +158,15 @@ export default function TryOn() {
   }
   return (
     <Page>
+      {/* Full-screen wait from the first tap: uploads and start run underneath. */}
+      <Modal visible={busy} animationType="fade" statusBarTranslucent>
+        <CookingLoader
+          fullScreen
+          messages={TRYON_MESSAGES}
+          seconds={25}
+          startedAt={startedAt.current}
+        />
+      </Modal>
       <LinearGradient
         colors={gradients.yellow}
         style={{
