@@ -10,6 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "config": { "usesNonExemptEncryption": false },
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
+      },
       "bundleIdentifier": "com.outfitleague.app"
     },
     "android": {
