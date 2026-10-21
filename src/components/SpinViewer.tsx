@@ -39,6 +39,10 @@ export function SpinViewer({
     setZoomed(to > 1);
   };
 
+  const turn = (dx: number) =>
+    (((g.current.index - Math.round(dx / STEP)) % angles) + angles) % angles;
+  const column = sheetWidth / angles;
+
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -61,19 +65,14 @@ export function SpinViewer({
             scale.setValue(next);
           } else if (g.current.scale > 1) {
             pan.setValue({ x: g.current.x + s.dx, y: g.current.y + s.dy });
-          } else {
-            const n = angles;
-            const next =
-              (((g.current.index - Math.round(s.dx / STEP)) % n) + n) % n;
-            setIndex((i) => (i === next ? i : next));
-          }
+          } else setIndex(turn(s.dx));
         },
         onPanResponderRelease: (_, s) => {
           if (g.current.pinch)
             return zoomTo(g.current.scale < 1.1 ? 1 : g.current.scale);
           if (g.current.scale > 1)
             ((g.current.x += s.dx), (g.current.y += s.dy));
-          setIndex((i) => ((g.current.index = i), i));
+          else setIndex((g.current.index = turn(s.dx)));
         },
       }),
     [angles],
@@ -103,20 +102,31 @@ export function SpinViewer({
             ],
           }}
         >
-          {/* One loaded image, shifted so the current column is centred. */}
-          <Image
-            source={{ uri: sheet }}
-            cachePolicy="none"
-            onLoad={(e) => setAspect(e.source.width / e.source.height)}
+          {/* One loaded image, clipped to the current column. */}
+          <View
             style={{
               position: "absolute",
               top: 0,
               height: box.height,
-              width: sheetWidth,
-              left: box.width / 2 - ((index + 0.5) * sheetWidth) / angles,
+              width: column,
+              left: (box.width - column) / 2,
+              overflow: "hidden",
             }}
-            accessibilityLabel={`AI 360° preview, angle ${index + 1} of ${angles}`}
-          />
+          >
+            <Image
+              source={{ uri: sheet }}
+              cachePolicy="none"
+              onLoad={(e) => setAspect(e.source.width / e.source.height)}
+              style={{
+                position: "absolute",
+                top: 0,
+                height: box.height,
+                width: sheetWidth,
+                left: -index * column,
+              }}
+              accessibilityLabel={`AI 360° preview, angle ${index + 1} of ${angles}`}
+            />
+          </View>
         </Animated.View>
         <View
           pointerEvents="none"
