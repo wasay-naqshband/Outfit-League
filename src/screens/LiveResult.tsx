@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Modal, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -37,6 +37,7 @@ export default function LiveResult({ id }: { id: string }) {
   const view = query.data;
   const uri = segment === "Before" ? view?.beforeUrl : view?.afterUrl;
   const spin = view?.spin;
+  const spinStart = useRef(0);
   useEffect(() => setImageError(false), [uri]);
   useEffect(() => {
     if (view && view.job.status !== "completed")
@@ -58,6 +59,7 @@ export default function LiveResult({ id }: { id: string }) {
   }
   async function makeSpin() {
     if (busy) return;
+    spinStart.current = Date.now();
     setBusy(true);
     setError("");
     try {
@@ -116,8 +118,6 @@ export default function LiveResult({ id }: { id: string }) {
             <>
               {spin?.status === "completed" && spin.sheetUrl ? (
                 <SpinViewer video={spin.sheetUrl} start={spin.start} />
-              ) : spin?.status === "processing" ? (
-                <CookingLoader messages={SPIN_MESSAGES} seconds={60} />
               ) : (
                 <LinearGradient
                   colors={gradients.lavender}
@@ -297,6 +297,22 @@ export default function LiveResult({ id }: { id: string }) {
           )}
         </View>
       </Page>
+      {/* Full-screen wait while the 360° video is made; closing keeps it cooking. */}
+      <Modal
+        visible={
+          segment === "360°" && (busy || spin?.status === "processing")
+        }
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <CookingLoader
+          fullScreen
+          messages={SPIN_MESSAGES}
+          seconds={60}
+          startedAt={spinStart.current || undefined}
+          onClose={() => setSegment("After")}
+        />
+      </Modal>
       <FloatingTabBar active="Try On" />
     </View>
   );
