@@ -40,15 +40,17 @@ export function FloatingTabBar({
           accessibilityLabel={tab.label}
           accessibilityState={{ selected: tab.label === active }}
           onPress={() =>
-            onSelect ? onSelect(tab.label) : router.replace(tab.href)
+            onSelect ? onSelect(tab.label) : router.navigate(tab.href)
           }
           style={{
             height: 48,
-            // Always set all three: native layout keeps stale values when `flex` is unset.
-            flexGrow: tab.label === active ? 0 : 1,
-            flexShrink: 0,
-            flexBasis: tab.label === active ? "auto" : 0,
-            paddingHorizontal: tab.label === active ? 20 : 0,
+            // Widths come only from flexGrow over a fixed basis: native layout kept
+            // stale widths when the active tab switched to content-sized ("auto").
+            flexBasis: 0,
+            flexShrink: 1,
+            flexGrow: tab.label === active ? 2.2 : 1,
+            minWidth: 0,
+            overflow: "hidden",
             borderRadius: 24,
             backgroundColor: tab.label === active ? c.yellow : "transparent",
             flexDirection: "row",
@@ -62,7 +64,10 @@ export function FloatingTabBar({
             color={tab.label === active ? c.ink : c.inactive}
           />
           {tab.label === active && (
-            <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>
+            <Text
+              numberOfLines={1}
+              style={{ fontFamily: fonts.bold, fontSize: 16 }}
+            >
               {tab.label}
             </Text>
           )}
