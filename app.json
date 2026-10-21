@@ -61,7 +61,9 @@
           "cameraPermission": "Take a photo for your private outfit preview.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

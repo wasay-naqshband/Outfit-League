@@ -28,12 +28,18 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  async function finish() {
+    const battle = await takeBattleReturn();
+    if (battle)
+      router.replace({ pathname: "/battle/[id]", params: { id: battle } });
+    else router.replace("/(tabs)");
+  }
   async function social(provider: SocialProvider) {
     if (!supabase || busy) return;
     setBusy(true);
     setMessage("");
     try {
-      await startOAuth(provider);
+      if (await startOAuth(provider)) await finish();
     } catch {
       setMessage(
         `${provider === "google" ? "Google" : "Apple"} sign-in isn’t available yet. Please use email or try again later.`,
@@ -76,12 +82,8 @@ export default function Auth() {
         );
         return;
       }
-      if ("session" in result.data && result.data.session) {
-        const battle = await takeBattleReturn();
-        if (battle)
-          router.replace({ pathname: "/battle/[id]", params: { id: battle } });
-        else router.replace("/(tabs)");
-      } else
+      if ("session" in result.data && result.data.session) await finish();
+      else
         setMessage(
           mode === "Reset"
             ? "If an account exists, check your email for reset instructions."

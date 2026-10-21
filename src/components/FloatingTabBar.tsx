@@ -44,7 +44,10 @@ export function FloatingTabBar({
           }
           style={{
             height: 48,
-            flex: tab.label === active ? undefined : 1,
+            // Always set all three: native layout keeps stale values when `flex` is unset.
+            flexGrow: tab.label === active ? 0 : 1,
+            flexShrink: 0,
+            flexBasis: tab.label === active ? "auto" : 0,
             paddingHorizontal: tab.label === active ? 20 : 0,
             borderRadius: 24,
             backgroundColor: tab.label === active ? c.yellow : "transparent",
