@@ -1,14 +1,26 @@
 # When you are back
 
-## Latest: Milestone 10 beta preparation
+## Latest: October 21 — build 109 and web update
 
-Update: Apple login works in Incognito. The owner selected Codemagic instead of Expo cloud builds. The manual M2 workflow is ready in codemagic.yaml; follow CODEMAGIC_SETUP.md. Codemagic Personal signup is pending in the opened tab; keep billing disabled. Private repository and Apple signing integration are still needed before the first build. No Codemagic build or TestFlight upload has run.
+**Settings is reachable from every tab** (gear button), grouped into Account / Try On / Help & privacy, shows the app version, and shows Administration only when the server confirms moderator access (commit a28491d).
 
-Keyboard adjustments and native foreground status refresh are implemented. The current source passes 44 tests, TypeScript/format checks, and web/Android/iOS exports. See BETA_RELEASE.md for the TestFlight text and uncompleted physical iPhone checklist; PRIVACY_REVIEW.md is a factual owner-review draft.
+**iPhone:** build 107 was installed on the owner's iPhone 15 Pro (iOS 26.6.1), so TestFlight installation works. Codemagic build #9 produced **0.1.0 (109)** from a28491d. The manual "Owner beta" group was replaced by **Owner auto**, an internal group with automatic distribution: every new upload reaches the owner's TestFlight once Apple processes it. Builds are still started manually in Codemagic. The physical-device checklist in BETA_RELEASE.md is still outstanding.
 
-Two blockers remain: Apple identity verification needs checking in normal Safari/Chrome, and Expo's free iOS build quota is exhausted until November 1, 2026. No iOS cloud job, signed IPA, TestFlight upload or paid upgrade was created. The owner can choose to wait, use an available Mac with Xcode, or review paid Expo options. Milestone 10 is not complete. The older Android APK predates these latest source changes. No new website deployment was made for this milestone.
+**Web:** chutni.store updated via Netlify CLI (deploy 6ad873a34ee14747a08f82ce) and verified (gear button, version label). The CLI is now logged in on this PC: `pnpm export:web`, then `netlify deploy --prod --dir dist --site willowy-bienenstitch-cd3e0f`.
 
-The historical updates below include earlier access requests that have since been resolved. Urban Outfitters US now shows Pending (applied); it has not approved the application or granted feed/native-image permissions.
+The sections below are older and may be superseded by the above.
+
+## Milestone 10 beta preparation
+
+**Install the iPhone beta:** Apple has invited wasayiqbal2@gmail.com to the private Owner beta TestFlight group. Open the invitation on the iPhone, choose View in TestFlight, accept and install **Outfit League 0.1.0 (106)**. Tell us whether it opens and provide the iPhone model/iOS version. Do not send passwords or codes.
+
+Codemagic build 6ad77411454d2506f7ab7624 succeeded. Apple upload and processing completed; the group shows Testing, one build, one tester, and the owner shows Invited. Signing, app-group registration and App Store Connect Full Access setup were explicitly approved and completed. App ID: 6824954866. No public release, external testers or automatic future-build distribution. Billing remains disabled.
+
+The signed IPA and audit are in release/Outfit-League-TestFlight-106.ipa and release/testflight-106-audit.json. Both components have matching version/build numbers and the correct shared group; no actual private server secret values were found. See BETA_RELEASE.md for the still-uncompleted physical iPhone checklist and CODEMAGIC_SETUP.md for build details. Milestone 10 is not complete until device acceptance passes.
+
+GitHub repository is currently public; private visibility is supported. Urban Outfitters US remains Pending (applied), with no approved feed or native/AI image permissions. Final privacy review is still needed. No new web deployment was made for this native build.
+
+The historical updates below may describe earlier setup states; the current status above takes precedence.
 
 Latest October 20 update: account/profile controls, support and protected report review are implemented and published in deploy 6ad71ee410ad6566fc1323b5. Deletion was verified only on disposable accounts, including actual private file cleanup. Your account is preserved. USA/USD shopping import and stale-offer controls are ready; the USA catalog deliberately has no live offers until a permitted retailer feed is provided. See MILESTONE_8_SETUP.md and MILESTONE_9_SETUP.md for current acceptance limits.
 

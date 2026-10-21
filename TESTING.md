@@ -87,5 +87,9 @@ Android native build 90aedaa5-d794-4c8f-ae92-df306239880f finished successfully 
 
 ## Milestone 10 beta preparation — October 20
 
+Native release result: Codemagic build 6ad77411454d2506f7ab7624 successfully ran source checks, generated the iOS project, installed pods, applied both refreshed profiles, archived/exported the IPA and uploaded it to Apple without errors. App Store Connect 6824954866 processed **0.1.0 (106)**; private Owner beta shows **Testing**, one tester and one build. With explicit approval, the owner account was added and shows **Invited**. Actual installation, camera/gallery, keyboards, shares, deep links and account deletion on an iPhone are still not tested.
+
+Artifact audit: release/testflight-106-audit.json. Signed IPA is 14,351,647 bytes, SHA-256 0ebe4efd4b50c826ebbe3303aec0b63e74a208eeb7dc6e70e2481b4822140927. Both app and extension report 0.1.0/106, correct identifiers/team, and group.com.outfitleague.app in their embedded profiles. No actual private server secret values were found. Evidence: qa/testflight-build-106-testing.png, qa/testflight-owner-invited.png. Earlier blocker notes below describe the initial attempts and are resolved by this result.
+
 Current source: 44 Node tests, TypeScript and formatting pass; web/Android/iOS exports succeed. Evidence: qa/milestone-10-tests.log, qa/milestone-10-format.log and qa/milestone-10-build.log. Native source archive audit found no server files, private formats or actual private server secret values (release/milestone-10-archive-audit.json). No physical iPhone checks have passed yet. Apple verification and the exhausted free Expo iOS quota block a signed build/TestFlight; no simulator cloud job was created. See BETA_RELEASE.md for exact acceptance steps and current build limitations.
 
