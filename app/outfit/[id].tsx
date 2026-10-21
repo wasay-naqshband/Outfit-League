@@ -20,7 +20,9 @@ import {
   exploreItem,
   exploreSaveState,
   garments,
+  photoGarment,
   sampleGarment,
+  sized,
   saveExplore,
 } from "../../src/lib/explore";
 import { useApp } from "../../src/lib/state";
@@ -67,8 +69,12 @@ export default function OutfitDetail() {
         await client.invalidateQueries({
           queryKey: ["library", session.user.id],
         });
-      } else if (item.garment) {
-        draft.setGarment(await sampleGarment(item.garment));
+      } else if (item.photo_url || item.garment) {
+        draft.setGarment(
+          item.photo_url
+            ? await photoGarment(item.photo_url)
+            : await sampleGarment(item.garment!),
+        );
         router.push("/(tabs)/try-on");
       }
     } catch (e) {
@@ -80,7 +86,10 @@ export default function OutfitDetail() {
   }
   return (
     <Page>
-      <FlatHeader title={item?.name ?? "Outfit details"} pill="Sample look" />
+      <FlatHeader
+        title={item?.name ?? "Outfit details"}
+        pill={item?.brand || "Sample look"}
+      />
       <View style={{ padding: 20, gap: 16 }}>
         {query.isPending ? (
           <LoadingSkeleton />
@@ -102,12 +111,23 @@ export default function OutfitDetail() {
                   overflow: "hidden",
                 }}
               >
-                <Figure image={item.image} scale={1.12} />
+                {item.photo_url ? (
+                  <Image
+                    source={{ uri: sized(item.photo_url, 900) }}
+                    style={{ flex: 1 }}
+                    contentFit="cover"
+                    contentPosition="top"
+                    accessibilityLabel={item.name}
+                  />
+                ) : (
+                  <Figure image={item.image} scale={1.12} />
+                )}
               </LinearGradient>
               <Heading size={32}>{item.name}</Heading>
               <Body>
                 {item.style} · {item.category}
                 {item.brand ? ` · ${item.brand}` : ""}
+                {item.price_label ? ` · ${item.price_label}` : ""}
               </Body>
               <Body>{item.description}</Body>
               <Body>Tags: {item.tags}</Body>
@@ -115,7 +135,11 @@ export default function OutfitDetail() {
               {item.source_url && (
                 <Button
                   secondary
-                  title="Open original source"
+                  title={
+                    item.photo_url && item.brand
+                      ? `Shop at ${item.brand}`
+                      : "Open original source"
+                  }
                   onPress={() => {
                     const url = cleanSourceUrl(item.source_url!);
                     if (url)
@@ -153,7 +177,15 @@ export default function OutfitDetail() {
                   retry={() => void saved.refetch()}
                 />
               )}
-              {item.garment ? (
+              {item.photo_url ? (
+                <Button
+                  secondary
+                  icon="sparkles"
+                  disabled={busy}
+                  title={session ? "Try this on" : "Sign in to try this on"}
+                  onPress={() => void act("try")}
+                />
+              ) : item.garment ? (
                 <>
                   <Heading size={23}>Garment for Try On</Heading>
                   <Image
@@ -187,15 +219,26 @@ export default function OutfitDetail() {
                   Add your own garment photo in Try On to recreate this style.
                 </Body>
               )}
-              <Button
-                secondary
-                icon="shopping-bag"
-                title="Shop similar styles"
-                onPress={() =>
-                  router.push({ pathname: "/shop", params: { look: item.id } })
+              {!item.photo_url && (
+                <Button
+                  secondary
+                  icon="shopping-bag"
+                  title="Shop similar styles"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/shop",
+                      params: { look: item.id },
+                    })
+                  }
+                />
+              )}
+              <DemoNote
+                text={
+                  item.photo_url
+                    ? `Beta preview · photo from the ${item.brand} store, not affiliated · price may change`
+                    : "Sample inspiration · no retailer, price or AI result is implied"
                 }
               />
-              <DemoNote text="Sample inspiration · no retailer, price or AI result is implied" />
             </>
           )
         )}

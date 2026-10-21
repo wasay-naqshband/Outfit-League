@@ -573,7 +573,17 @@ export function OutfitCard({
           }
           style={StyleSheet.absoluteFill}
         >
-          <Figure image={outfit.image} bottom={label ? 64 : 0} />
+          {outfit.photo ? (
+            <Image
+              source={{ uri: `${outfit.photo}?width=600` }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              contentPosition="top"
+              accessibilityLabel={outfit.name}
+            />
+          ) : (
+            <Figure image={outfit.image} bottom={label ? 64 : 0} />
+          )}
           {source && (
             <View style={s.source}>
               <Text style={{ fontFamily: f.bold, fontSize: 12 }}>

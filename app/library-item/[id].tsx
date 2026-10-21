@@ -128,10 +128,14 @@ export default function LibraryDetail() {
               {!!error && <Body>{error}</Body>}
               {item.explore_id && (
                 <Body style={{ fontSize: 13 }}>
-                  Saved Explore sample · illustrated inspiration
+                  {item.explore_photo_url
+                    ? `Saved from Explore · ${item.brand}`
+                    : "Saved Explore sample · illustrated inspiration"}
                 </Body>
               )}
-              {item.photo_path || item.explore_garment ? (
+              {item.photo_path ||
+              item.explore_photo_url ||
+              item.explore_garment ? (
                 <>
                   <Button
                     icon="sparkles"
@@ -143,7 +147,9 @@ export default function LibraryDetail() {
                     Choose a photo showing one garment for the best result.
                     Preview quality varies by clothing type. A credit is used
                     only when you press Generate.
-                    {item.explore_garment && !item.photo_path
+                    {item.explore_garment &&
+                    !item.photo_path &&
+                    !item.explore_photo_url
                       ? " This uses the sample flat garment illustration, not the character artwork."
                       : ""}
                   </Body>

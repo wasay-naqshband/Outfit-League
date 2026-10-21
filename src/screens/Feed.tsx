@@ -84,7 +84,8 @@ export default function Feed() {
                               : 228
                         }
                         label={column === 0 && index === 0}
-                        caption="Sample"
+                        caption={item.price_label || "Sample"}
+                        source={!!item.photo_url}
                         sticker={
                           !filtered && index === 0
                             ? column === 0
@@ -139,7 +140,7 @@ export default function Feed() {
           </View>
         </>
       )}
-      <DemoNote text="Sample collection · supplied artwork, original garment illustrations · no retail offers" />
+      <DemoNote text="Beta preview · product photos from Pakistani brand stores, not affiliated · prices may change" />
     </Page>
   );
 }

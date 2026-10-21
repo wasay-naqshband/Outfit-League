@@ -14,6 +14,7 @@ export type Outfit = {
   palette: Palette;
   image: keyof typeof art;
   source: string;
+  photo?: string | null;
 };
 export const outfits: Outfit[] = [
   {

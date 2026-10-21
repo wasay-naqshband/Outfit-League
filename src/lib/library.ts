@@ -32,6 +32,7 @@ export type LibraryItem = {
   explore_id?: string | null;
   explore_image?: keyof typeof import("../data").art | null;
   explore_garment?: keyof typeof import("./explore").garments | null;
+  explore_photo_url?: string | null;
 };
 export type LibraryFields = Pick<
   LibraryItem,
@@ -59,6 +60,8 @@ export async function libraryItem(id: string): Promise<LibraryItem> {
   return withPhoto(data);
 }
 async function withPhoto(item: LibraryItem): Promise<LibraryItem> {
+  if (!item.photo_path && item.explore_photo_url)
+    return { ...item, photoUrl: `${item.explore_photo_url}?width=600` };
   if (!item.photo_path || !supabase) return item;
   const { data } = await supabase.storage
     .from("library-private")
@@ -159,6 +162,10 @@ export async function deleteLibraryItem(id: string) {
 }
 export async function libraryGarment(item: LibraryItem): Promise<LocalPhoto> {
   const current = await libraryItem(item.id);
+  if (!current.photo_path && current.explore_photo_url) {
+    const { photoGarment } = await import("./explore");
+    return photoGarment(current.explore_photo_url);
+  }
   if (!current.photo_path && current.explore_garment) {
     const { sampleGarment } = await import("./explore");
     return sampleGarment(current.explore_garment);

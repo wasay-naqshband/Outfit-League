@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import type { Outfit, art } from "../data";
 import { Image, Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 import { preparePhoto } from "./photos";
 import { analytics } from "./analytics";
 
@@ -24,10 +25,17 @@ export type ExploreOutfit = {
   palette: Outfit["palette"];
   source_label: string;
   source_url: string | null;
+  photo_url: string | null;
+  price_label: string;
   rank: number;
 };
 export function cardOutfit(item: ExploreOutfit): Outfit {
-  return { ...item, category: item.style, source: "Sample collection" };
+  return {
+    ...item,
+    category: item.style,
+    source: item.brand || "Sample collection",
+    photo: item.photo_url,
+  };
 }
 export async function explorePage(
   search: string,
@@ -90,4 +98,16 @@ export async function sampleGarment(key: keyof typeof garments) {
         }
       : Image.resolveAssetSource(source);
   return preparePhoto(asset.uri, asset.width, asset.height);
+}
+
+// Shopify CDN resizes on request; keep downloads small.
+export const sized = (url: string, width: number) => `${url}?width=${width}`;
+export async function photoGarment(url: string) {
+  if (Platform.OS === "web") return preparePhoto(sized(url, 1200));
+  const file = await FileSystem.downloadAsync(
+    sized(url, 1200),
+    `${FileSystem.cacheDirectory}garment-${Date.now()}.jpg`,
+  );
+  if (file.status !== 200) throw new Error("This garment photo couldn’t load.");
+  return preparePhoto(file.uri);
 }
