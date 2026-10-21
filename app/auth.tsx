@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { router } from "expo-router";
 import {
   Body,
@@ -16,7 +23,7 @@ import { takeBattleReturn } from "../src/lib/battles";
 import { startOAuth, type SocialProvider } from "../src/lib/oauth";
 
 export default function Auth() {
-  const [mode, setMode] = useState("Sign in");
+  const [mode, setMode] = useState<"Sign in" | "Sign up" | "Reset">("Sign in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,15 +110,21 @@ export default function Auth() {
       <Page keyboardInsets={false}>
         <FlatHeader title="Welcome" pill="Account" />
         <View style={{ padding: 20, gap: 16 }}>
-          <Heading size={34}>Welcome to the league.</Heading>
-          <SegmentedControl
-            options={["Sign in", "Sign up", "Reset"]}
-            selected={mode}
-            onChange={(value) => {
-              setMode(value);
-              setMessage("");
-            }}
-          />
+          <Heading size={34}>
+            {mode === "Reset"
+              ? "Reset your password."
+              : "Welcome to the league."}
+          </Heading>
+          {mode !== "Reset" && (
+            <SegmentedControl
+              options={["Sign in", "Sign up"]}
+              selected={mode}
+              onChange={(value) => {
+                setMode(value as "Sign in" | "Sign up");
+                setMessage("");
+              }}
+            />
+          )}
           {!supabase && (
             <Body>
               Email authentication needs a Supabase project. This local build is
@@ -161,19 +174,42 @@ export default function Auth() {
             editable={!busy}
           />
           {mode !== "Reset" && (
-            <TextInput
-              accessibilityLabel="Password"
-              placeholder="Password · at least 8 characters"
-              placeholderTextColor={c.placeholder}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete={
-                mode === "Sign up" ? "new-password" : "current-password"
-              }
-              style={field}
-              editable={!busy}
-            />
+            <View style={{ gap: 10 }}>
+              <TextInput
+                accessibilityLabel="Password"
+                placeholder="Password · at least 8 characters"
+                placeholderTextColor={c.placeholder}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoComplete={
+                  mode === "Sign up" ? "new-password" : "current-password"
+                }
+                style={field}
+                editable={!busy}
+              />
+              {mode === "Sign in" && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Forgot password"
+                  onPress={() => {
+                    setMode("Reset");
+                    setMessage("");
+                  }}
+                  style={{ alignSelf: "flex-end", paddingVertical: 2 }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bold,
+                      fontSize: 15,
+                      color: c.ink,
+                    }}
+                  >
+                    Forgot password?
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           )}
           {!!message && (
             <Body
@@ -200,10 +236,23 @@ export default function Auth() {
             title="Browse the demo"
             onPress={() => router.replace("/(tabs)")}
           />
-          <Body style={{ fontSize: 13 }}>
-            Google, Apple and email accounts use the same private Outfit League
-            profile. No account is created when browsing the demo.
-          </Body>
+          {mode === "Reset" && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to sign in"
+              onPress={() => {
+                setMode("Sign in");
+                setMessage("");
+              }}
+              style={{ alignSelf: "center", padding: 6 }}
+            >
+              <Text
+                style={{ fontFamily: fonts.bold, fontSize: 15, color: c.ink }}
+              >
+                Back to sign in
+              </Text>
+            </Pressable>
+          )}
         </View>
       </Page>
     </KeyboardAvoidingView>
