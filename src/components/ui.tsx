@@ -41,7 +41,8 @@ export type IconName =
   | "x"
   | "mail"
   | "google"
-  | "apple";
+  | "apple"
+  | "settings";
 export function Icon({
   name,
   color = c.ink,
@@ -179,6 +180,15 @@ export function RoundButton({
     </Pressable>
   );
 }
+export function SettingsButton() {
+  return (
+    <RoundButton
+      name="settings"
+      label="Settings"
+      onPress={() => router.push("/settings")}
+    />
+  );
+}
 export function Logo({ onPress }: { onPress?: () => void }) {
   return (
     <Pressable
@@ -311,7 +321,8 @@ export function AppHeader({
         <Heading size={26} style={{ flex: 1 }}>
           {title}
         </Heading>
-        <CreditPill />
+        <CreditPill compact />
+        <SettingsButton />
       </View>
       <View style={{ marginHorizontal: 20, marginTop: 14 }}>
         <SearchField

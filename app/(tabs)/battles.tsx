@@ -11,6 +11,7 @@ import {
   Heading,
   LoadingSkeleton,
   Page,
+  SettingsButton,
 } from "../../src/components/ui";
 import { myBattles } from "../../src/lib/battles";
 import { useApp } from "../../src/lib/state";
@@ -42,7 +43,16 @@ export default function Battles() {
           gap: 12,
         }}
       >
-        <Heading size={32}>Which fit wins?</Heading>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Heading size={32}>Which fit wins?</Heading>
+          <SettingsButton />
+        </View>
         <Body>Two looks. Your friends. Their pick.</Body>
         <Button
           title="Create a battle"

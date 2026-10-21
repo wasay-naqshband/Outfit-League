@@ -14,6 +14,7 @@ import {
   Icon,
   OutfitCard,
   Page,
+  SettingsButton,
 } from "../../src/components/ui";
 import { PhotoPickerCard } from "../../src/components/PhotoPickerCard";
 import { getOutfit } from "../../src/data";
@@ -169,7 +170,10 @@ export default function TryOn() {
           }}
         >
           <Heading size={26}>Try On</Heading>
-          <CreditPill />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <CreditPill compact />
+            <SettingsButton />
+          </View>
         </View>
         <Heading size={34}>Try any outfit on yourself.</Heading>
         <Body>Your next fit starts with two photos.</Body>
