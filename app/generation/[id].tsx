@@ -1,21 +1,22 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import {
   Body,
   Button,
   ErrorState,
   FlatHeader,
   Heading,
-  Icon,
   Page,
 } from "../../src/components/ui";
 import { useApp } from "../../src/lib/state";
+import {
+  CookingLoader,
+  TRYON_MESSAGES,
+} from "../../src/components/CookingLoader";
 import { useJob } from "../../src/lib/queries";
 import { friendlyError, isTerminal } from "../../src/types/tryon";
-import { colors, gradients } from "../../src/theme";
 export default function Generation() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session } = useApp();
@@ -64,33 +65,7 @@ export default function Generation() {
           </>
         ) : (
           <>
-            <LinearGradient
-              colors={gradients.lavender}
-              style={{
-                height: 300,
-                borderRadius: 32,
-                borderWidth: 4,
-                borderColor: colors.white,
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 20,
-              }}
-            >
-              <Icon name="sparkles" size={56} />
-              <ActivityIndicator color={colors.ink} size="large" />
-            </LinearGradient>
-            <Heading size={28}>
-              {job?.status === "processing"
-                ? "Bringing your fit to life."
-                : "Your look is on its way."}
-            </Heading>
-            <Body>
-              {job?.status === "processing"
-                ? "The AI provider is generating your preview."
-                : job?.status === "submitting" || job?.status === "pending"
-                  ? "Preparing your photos for the AI provider."
-                  : "Waiting for the AI provider. No need to keep this screen open."}
-            </Body>
+            <CookingLoader messages={TRYON_MESSAGES} seconds={25} />
             <Body style={{ fontSize: 13 }}>
               Your credit is reserved while this runs. Failed or timed-out
               generations are refunded automatically. Leaving this screen does

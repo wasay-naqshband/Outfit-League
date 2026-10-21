@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import { FloatingTabBar } from "../components/FloatingTabBar";
 import { SpinViewer } from "../components/SpinViewer";
+import { CookingLoader, SPIN_MESSAGES } from "../components/CookingLoader";
 import { useApp } from "../lib/state";
 import { useJob } from "../lib/queries";
 import { saveLook, startSpin } from "../lib/tryon-api";
@@ -115,6 +116,8 @@ export default function LiveResult({ id }: { id: string }) {
             <>
               {spin?.status === "completed" && spin.sheetUrl ? (
                 <SpinViewer video={spin.sheetUrl} start={spin.start} />
+              ) : spin?.status === "processing" ? (
+                <CookingLoader messages={SPIN_MESSAGES} seconds={60} />
               ) : (
                 <LinearGradient
                   colors={gradients.lavender}
@@ -130,22 +133,13 @@ export default function LiveResult({ id }: { id: string }) {
                   }}
                 >
                   <Icon name="refresh-cw" size={48} />
-                  {spin?.status === "processing" ? (
-                    <>
-                      <ActivityIndicator color={colors.ink} size="large" />
-                      <Body style={{ textAlign: "center" }}>
-                        Making your 360° video. This takes about a minute.
-                      </Body>
-                    </>
-                  ) : (
-                    <Body style={{ textAlign: "center" }}>
-                      {spin?.status === "failed"
-                        ? friendlyError(
-                            new Error(spin.error ?? "GENERATION_FAILED"),
-                          )
-                        : "See this look from the front, sides and back."}
-                    </Body>
-                  )}
+                  <Body style={{ textAlign: "center" }}>
+                    {spin?.status === "failed"
+                      ? friendlyError(
+                          new Error(spin.error ?? "GENERATION_FAILED"),
+                        )
+                      : "See this look from the front, sides and back."}
+                  </Body>
                 </LinearGradient>
               )}
               {spin?.status !== "completed" &&
