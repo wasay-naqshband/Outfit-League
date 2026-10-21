@@ -18,9 +18,9 @@ export default function Privacy() {
           agreeing to the try-on consent, sends your selected photos to the
           configured AI provider. The current provider is Genlook. We request
           short retention and copy completed results into private app storage.
-          Tapping “Make 360° view” sends that look’s AI result and garment photo
-          to Google Gemini to draw the other angles. Browsing or shopping a
-          saved look does not run AI.
+          Tapping “Make 360° view” sends that look’s AI result to Google Gemini
+          to make a turning video. Browsing or shopping a saved look does not
+          run AI.
         </Body>
         <Heading size={25}>Battle images become public by choice.</Heading>
         <Body>

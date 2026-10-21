@@ -20,7 +20,7 @@ export type JobView = {
     status: "processing" | "completed" | "failed";
     error: string | null;
     sheetUrl: string | null;
-    angles: number;
+    start: number;
   } | null;
 };
 export type Wallet = { available: number; reserved: number };

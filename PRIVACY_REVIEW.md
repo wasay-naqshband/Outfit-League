@@ -16,7 +16,7 @@ Your session is persisted on your device so you can remain signed in. The native
 
 Only an explicit Generate action, with your chosen person/garment images and try-on consent, sends those images to the configured AI provider. The current provider is Genlook. We request one-day product/output storage using the provider's API options and copy completed results into our private storage. This request is not a guarantee of deletion from every provider system or backup. Provider handling is subject to its own terms and retention practices.
 
-A separate explicit "Make 360° view" action on a completed look sends that look's AI result and garment photo to Google's Gemini API (paid tier) to create a four-angle preview, which is stored privately with the look and deleted with it. Google's paid-tier API terms govern its handling of those requests.
+A separate explicit "Make 360° view" action on a completed look sends that look's AI result image to Google's Gemini API (paid tier) to create a short turntable video, which is stored privately with the look and deleted with it. Google's paid-tier API terms govern its handling of those requests.
 
 Browsing, saving a look or searching the shopping catalog does not automatically submit photos to AI. Only upload images you have permission to use. AI results are generated visuals and may be inaccurate; they are not a measurement or a guarantee of fit.
 

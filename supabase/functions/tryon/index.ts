@@ -11,7 +11,7 @@ import {
 } from "../_shared/domain.ts";
 import { FashnProvider, GenlookProvider } from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
-import { generateSheet, SPIN_ANGLES } from "../_shared/spin.ts";
+import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 
 const env = (name: string) => Deno.env.get(name) ?? "";
@@ -257,7 +257,7 @@ async function resultView(job: Job) {
       status: spin.status,
       error: spin.error_code,
       sheetUrl: signed.spin ?? null,
-      angles: SPIN_ANGLES,
+      start: SPIN_START,
     },
   };
 }
@@ -294,17 +294,14 @@ async function removeJob(job: Job) {
 }
 async function makeSpin(job: Job, spin: Spin) {
   try {
-    const [person, garment] = await Promise.all([
-      readInput(job.result_asset_id!, job.owner_id),
-      readInput(job.garment_asset_id, job.owner_id),
-    ]);
-    const bytes = await normalizeResult(
-      await generateSheet(env("GEMINI_API_KEY"), person, garment),
+    const bytes = await generateSpinVideo(
+      env("GEMINI_API_KEY"),
+      await readInput(job.result_asset_id!, job.owner_id),
     );
     const id = crypto.randomUUID(),
-      path = job.owner_id + "/" + id + ".jpg";
+      path = job.owner_id + "/" + id + ".mp4";
     const upload = await bucket.upload(path, bytes, {
-      contentType: "image/jpeg",
+      contentType: "video/mp4",
       upsert: false,
     });
     if (upload.error) throw new Error("STORE_RESULT_FAILED");
@@ -315,7 +312,7 @@ async function makeSpin(job: Job, spin: Spin) {
         kind: "spin",
         path,
         byte_size: bytes.length,
-        content_type: "image/jpeg",
+        content_type: "video/mp4",
       }),
     );
     await rpc("finish_spin", { p_spin: spin.id, p_sheet: id });

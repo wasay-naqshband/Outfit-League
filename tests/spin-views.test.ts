@@ -20,6 +20,7 @@ before(async () => {
     "202610190006_catalog",
     "202610200007_account_control",
     "202610210011_spin_views",
+    "202610210012_spin_video",
   ])
     await db.exec(await readFile(`supabase/migrations/${file}.sql`, "utf8"));
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
@@ -112,4 +113,16 @@ test("deleting a try-on removes its spin", async () => {
     job,
   ]);
   assert.equal(left.rows.length, 0);
+});
+
+test("only spin assets may be MP4 videos", async () => {
+  const add = (kind: string) => {
+    const id = randomUUID();
+    return db.query(
+      "insert into private_assets(id,owner_id,kind,path,byte_size,content_type) values($1,$2,$3,$4,1024,'video/mp4')",
+      [id, owner, kind, `${owner}/${id}.mp4`],
+    );
+  };
+  await add("spin");
+  await assert.rejects(add("person"), /check constraint/);
 });

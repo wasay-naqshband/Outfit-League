@@ -114,7 +114,7 @@ export default function LiveResult({ id }: { id: string }) {
           ) : segment === "360°" ? (
             <>
               {spin?.status === "completed" && spin.sheetUrl ? (
-                <SpinViewer sheet={spin.sheetUrl} angles={spin.angles} />
+                <SpinViewer video={spin.sheetUrl} start={spin.start} />
               ) : (
                 <LinearGradient
                   colors={gradients.lavender}
@@ -134,7 +134,7 @@ export default function LiveResult({ id }: { id: string }) {
                     <>
                       <ActivityIndicator color={colors.ink} size="large" />
                       <Body style={{ textAlign: "center" }}>
-                        Making your 360° view. This takes about 30 seconds.
+                        Making your 360° video. This takes about a minute.
                       </Body>
                     </>
                   ) : (
@@ -170,10 +170,10 @@ export default function LiveResult({ id }: { id: string }) {
                 </Body>
               )}
               <Body style={{ fontSize: 13 }}>
-                Your try-on and garment photo are sent to Google Gemini to
-                create the other angles. Sides and back are AI guesses, not
-                photos. Failed views refund the credit automatically. Deleting
-                this look deletes its 360° view.
+                Your AI try-on image is sent to Google Gemini to create a
+                turning video. Sides and back are AI guesses, not photos. Failed
+                views refund the credit automatically. Deleting this look
+                deletes its 360° view.
               </Body>
             </>
           ) : (

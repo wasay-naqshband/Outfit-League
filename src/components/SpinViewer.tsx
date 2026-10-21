@@ -1,32 +1,45 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, PanResponder, View } from "react-native";
-import { Image } from "expo-image";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { LinearGradient } from "expo-linear-gradient";
 import { Body, Icon } from "./ui";
 import { colors, gradients, shadow } from "../theme";
 
-const STEP = 40; // drag distance (px) per angle
 const MAX_ZOOM = 3;
 
-// Drag to turn through the angles, pinch or double-tap to zoom. `sheet` is one
-// image with the angles side by side in equal columns; only one column shows.
+// A turntable video: it loops on its own; drag pauses it and scrubs (one card
+// width = one full turn); pinch or double-tap zooms. `start` skips the intro.
 export function SpinViewer({
-  sheet,
-  angles,
+  video,
+  start,
   height = 440,
 }: {
-  sheet: string;
-  angles: number;
+  video: string;
+  start: number;
   height?: number;
 }) {
-  const [index, setIndex] = useState(0);
+  const player = useVideoPlayer(video, (p) => {
+    p.muted = true;
+    p.play();
+  });
   const [zoomed, setZoomed] = useState(false);
-  const [box, setBox] = useState({ width: 0, height: 0 });
-  const [aspect, setAspect] = useState(16 / 9);
-  const sheetWidth = box.height * aspect;
+  const width = useRef(1);
   const scale = useRef(new Animated.Value(1)).current;
   const pan = useRef(new Animated.ValueXY()).current;
-  const g = useRef({ index: 0, scale: 1, x: 0, y: 0, pinch: 0, tap: 0 });
+  const g = useRef({ scale: 1, x: 0, y: 0, pinch: 0, tap: 0, from: start });
+
+  // Skip the intro once loaded (seeking earlier is ignored), and loop past it.
+  useEffect(() => {
+    const restart = () => {
+      player.currentTime = start;
+      player.play();
+    };
+    const ready = player.addListener("statusChange", ({ status }) => {
+      if (status === "readyToPlay" && player.currentTime < start) restart();
+    });
+    const end = player.addListener("playToEnd", restart);
+    return () => (ready.remove(), end.remove());
+  }, [player, start]);
 
   const zoomTo = (to: number) => {
     g.current.scale = to;
@@ -39,10 +52,6 @@ export function SpinViewer({
     setZoomed(to > 1);
   };
 
-  const turn = (dx: number) =>
-    (((g.current.index - Math.round(dx / STEP)) % angles) + angles) % angles;
-  const column = sheetWidth / angles;
-
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -54,6 +63,8 @@ export function SpinViewer({
           if (now - g.current.tap < 300) zoomTo(g.current.scale > 1 ? 1 : 2);
           g.current.tap = now;
           g.current.pinch = 0;
+          g.current.from = player.currentTime;
+          player.pause();
         },
         onPanResponderMove: (e, s) => {
           const [a, b] = e.nativeEvent.touches;
@@ -65,17 +76,20 @@ export function SpinViewer({
             scale.setValue(next);
           } else if (g.current.scale > 1) {
             pan.setValue({ x: g.current.x + s.dx, y: g.current.y + s.dy });
-          } else setIndex(turn(s.dx));
+          } else {
+            const span = Math.max(0.1, player.duration - start);
+            const t = g.current.from - start - (s.dx / width.current) * span;
+            player.currentTime = start + (((t % span) + span) % span);
+          }
         },
         onPanResponderRelease: (_, s) => {
           if (g.current.pinch)
             return zoomTo(g.current.scale < 1.1 ? 1 : g.current.scale);
           if (g.current.scale > 1)
             ((g.current.x += s.dx), (g.current.y += s.dy));
-          else setIndex((g.current.index = turn(s.dx)));
         },
       }),
-    [angles],
+    [player, start],
   );
 
   return (
@@ -92,7 +106,7 @@ export function SpinViewer({
       >
         <Animated.View
           {...responder.panHandlers}
-          onLayout={(e) => setBox(e.nativeEvent.layout)}
+          onLayout={(e) => (width.current = e.nativeEvent.layout.width)}
           style={{
             flex: 1,
             transform: [
@@ -102,31 +116,14 @@ export function SpinViewer({
             ],
           }}
         >
-          {/* One loaded image, clipped to the current column. */}
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              height: box.height,
-              width: column,
-              left: (box.width - column) / 2,
-              overflow: "hidden",
-            }}
-          >
-            <Image
-              source={{ uri: sheet }}
-              cachePolicy="none"
-              onLoad={(e) => setAspect(e.source.width / e.source.height)}
-              style={{
-                position: "absolute",
-                top: 0,
-                height: box.height,
-                width: sheetWidth,
-                left: -index * column,
-              }}
-              accessibilityLabel={`AI 360° preview, angle ${index + 1} of ${angles}`}
-            />
-          </View>
+          <VideoView
+            player={player}
+            nativeControls={false}
+            contentFit="contain"
+            pointerEvents="none"
+            style={{ width: "100%", height: "100%" }}
+            accessibilityLabel="AI 360° preview video"
+          />
         </Animated.View>
         <View
           pointerEvents="none"
@@ -145,28 +142,6 @@ export function SpinViewer({
           <Body style={{ fontSize: 13, lineHeight: 16 }}>
             {zoomed ? "Double-tap to reset" : "Drag to turn · pinch to zoom"}
           </Body>
-        </View>
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            bottom: 14,
-            alignSelf: "center",
-            flexDirection: "row",
-            gap: 6,
-          }}
-        >
-          {Array.from({ length: angles }, (_, i) => (
-            <View
-              key={i}
-              style={{
-                width: i === index ? 18 : 7,
-                height: 7,
-                borderRadius: 4,
-                backgroundColor: i === index ? colors.ink : colors.white,
-              }}
-            />
-          ))}
         </View>
       </LinearGradient>
     </View>
