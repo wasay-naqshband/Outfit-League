@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, TextInput, Pressable } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,79 +9,108 @@ import {
   ErrorState,
   FlatHeader,
   Heading,
+  Icon,
   LoadingSkeleton,
   Page,
 } from "../../src/components/ui";
 import { BattleCards } from "../../src/components/BattleCards";
+import { LookPicker } from "../../src/components/LookPicker";
+import { Avatar } from "../../src/components/Avatar";
 import {
   battleCall,
   copyBattleLink,
-  publicBattleUrl,
   shareBattleLink,
-  type BattleView,
   rememberBattleReturn,
+  type BattleView,
+  type Side,
 } from "../../src/lib/battles";
 import { useApp } from "../../src/lib/state";
+import { useProfile } from "../../src/lib/queries";
 import { analytics } from "../../src/lib/analytics";
 import { colors, fonts } from "../../src/theme";
-import { supabase } from "../../src/lib/supabase";
+
+function Chip({ text }: { text: string }) {
+  return (
+    <View
+      style={{
+        backgroundColor: colors.white,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 14,
+      }}
+    >
+      <Text style={{ fontFamily: fonts.medium, fontSize: 13 }}>{text}</Text>
+    </View>
+  );
+}
+
+function TextLink({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={{ padding: 8 }}
+    >
+      <Text
+        style={{
+          fontFamily: fonts.medium,
+          fontSize: 14,
+          color: colors.text3,
+          textAlign: "center",
+          textDecorationLine: "underline",
+        }}
+      >
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function BattleDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>(),
-    { session, ready } = useApp(),
-    client = useQueryClient();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { session, ready } = useApp();
+  const profile = useProfile();
+  const client = useQueryClient();
   const query = useQuery({
     queryKey: ["battle", session?.user.id, id],
     queryFn: () => battleCall({ action: "view", id }),
     enabled: ready && !!id,
-    refetchInterval: 45000,
+    refetchInterval: 15000,
   });
-  const [choice, setChoice] = useState<"A" | "B" | null>(null),
-    [name, setName] = useState(""),
-    [consent, setConsent] = useState(false),
-    [publishConsent, setPublishConsent] = useState(false),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState(""),
-    [story, setStory] = useState(false),
-    [confirmUnpublish, setConfirmUnpublish] = useState(false),
-    [reporting, setReporting] = useState(false),
-    [extra, setExtra] = useState<BattleView["voters"]>([]),
-    [more, setMore] = useState(true);
-  const lock = useRef(false),
-    battle = query.data;
+  const [choice, setChoice] = useState<Side | null>(null);
+  const [pick, setPick] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [more, setMore] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const lock = useRef(false);
+  const battle = query.data;
   useEffect(() => {
-    let live = true;
-    setName("");
-    setConsent(false);
-    if (session)
-      void supabase
-        ?.from("profiles")
-        .select("display_name")
-        .eq("id", session.user.id)
-        .single()
-        .then(({ data }) => {
-          if (live) setName(data?.display_name ?? "");
-        });
-    return () => {
-      live = false;
-    };
-  }, [session?.user.id]);
+    if (profile.data?.name) setName(profile.data.name);
+  }, [profile.data?.name]);
+
   async function action(type: string, fields: Record<string, unknown> = {}) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setMessage("");
     try {
-      const result = await battleCall({ action: type, id, ...fields });
+      const result = await battleCall<BattleView>({
+        action: type,
+        id,
+        ...fields,
+      });
       client.setQueryData(["battle", session?.user.id, id], result);
-      await client.invalidateQueries({ queryKey: ["battles"] });
-      if (type === "vote") {
+      void client.invalidateQueries({ queryKey: ["battles"] });
+      if (type === "vote")
         analytics.track(
           "vote_submitted",
           { voting_mode: result.mode },
           `vote:${id}`,
         );
-        setMessage(`Your vote for Fit ${result.mine} is recorded.`);
-      }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Please try again.");
       void query.refetch();
@@ -90,169 +120,219 @@ export default function BattleDetail() {
     }
   }
   async function share(copy = false) {
+    if (!battle) return;
     try {
-      await (copy ? copyBattleLink(id) : shareBattleLink(id, battle!.title));
+      if (copy) await copyBattleLink(id);
+      else
+        await shareBattleLink(
+          id,
+          battle.title,
+          battle.status === "waiting"
+            ? "I challenge you to a fit battle on Outfit League 👀 Join with your look:"
+            : `${battle.title} Vote for your pick 👇`,
+        );
       analytics.track("battle_shared", { method: copy ? "copy" : "share" });
-      setMessage(
-        copy
-          ? "Voting link copied."
-          : "Share sheet opened, or link copied if sharing is unavailable.",
-      );
+      if (copy) setMessage("Link copied.");
     } catch (e) {
       if (e instanceof Error && e.name !== "AbortError") setMessage(e.message);
     }
   }
-  async function report(reason: string) {
-    if (lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    try {
-      await battleCall({ action: "report", id, reason });
-      setMessage("Report received for review.");
-      setReporting(false);
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Please try again.");
-    } finally {
-      lock.current = false;
-      setBusy(false);
-    }
+  function signIn() {
+    void rememberBattleReturn(id).then(() => router.push("/auth"));
   }
-  async function loadVoters() {
-    if (busy || !battle) return;
-    setBusy(true);
-    try {
-      const last = [...battle.voters, ...extra].at(-1)?.id ?? 0;
-      const page = await battleCall({ action: "view", id, after: last });
-      setExtra((prior) => [...prior, ...page.voters]);
-      setMore(page.voters.length === 40);
-    } catch {
-      setMessage("More votes couldn’t load. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  const voters = [
-    ...new Map(
-      [...(battle?.voters ?? []), ...extra].map((v) => [v.id, v]),
-    ).values(),
-  ];
-  const canVote = battle?.status === "published" && !battle.mine;
+
+  const total = battle
+    ? battle.options.reduce((n, o) => n + battle.counts[o.side], 0)
+    : 0;
+  const live = battle?.status === "published";
+  const canVote =
+    live && !battle?.mine && !battle?.isOwner && !battle?.isFriend;
+  const showResults =
+    !!battle &&
+    (!!battle.mine ||
+      battle.isOwner ||
+      battle.isFriend ||
+      battle.status === "closed");
+  const challenger = battle?.players?.a;
+
   return (
     <Page>
       <FlatHeader
-        title="Which fit wins?"
-        pill={battle?.status === "draft" ? "Private preview" : "Outfit League"}
+        title={battle?.kind === "versus" ? "Fit battle" : "Help me choose"}
       />
       <View style={{ padding: 20, gap: 16 }}>
         {query.isPending ? (
           <LoadingSkeleton />
-        ) : query.isError ? (
+        ) : query.isError || !battle ? (
           <ErrorState
-            message="This battle is unavailable, unpublished or hidden."
+            message="This battle is unavailable or no longer shared."
             retry={() => void query.refetch()}
           />
-        ) : (
-          battle && (
-            <>
-              <Heading size={30}>{battle.title}</Heading>
-              <Body>
-                {battle.mode === "anonymous"
-                  ? "Anonymous voting · names are not displayed"
-                  : "Public voting · display names and choices are visible to anyone with this link"}
-              </Body>
-              <BattleCards
-                battle={battle}
-                choice={battle.mine ?? choice}
-                onSelect={canVote && !busy ? setChoice : undefined}
+        ) : battle.status === "waiting" ? (
+          // Versus invite: the challenger waits; a friend joins with a look.
+          <>
+            <View style={{ alignItems: "center", gap: 10 }}>
+              <Avatar
+                uri={challenger?.avatar}
+                name={challenger?.name ?? undefined}
+                size={72}
               />
-              <Heading size={23}>
-                {battle.counts.A + battle.counts.B}{" "}
-                {battle.counts.A + battle.counts.B === 1 ? "vote" : "votes"}
-                {battle.counts.A + battle.counts.B
-                  ? battle.counts.A === battle.counts.B
-                    ? " · It’s a tie!"
-                    : ` · Fit ${battle.counts.A > battle.counts.B ? "A" : "B"} leads`
-                  : ""}
+              <Heading size={26} style={{ textAlign: "center" }}>
+                {battle.isOwner
+                  ? "Waiting for your friend…"
+                  : `${challenger?.name ?? "A friend"} challenged you!`}
               </Heading>
-              <Body>
-                {battle.status === "published"
-                  ? "Send the link to friends or share it with story viewers. Anyone with the link can open this battle."
-                  : battle.status === "closed"
-                    ? "Voting is closed. Results remain visible to people with the link."
-                    : battle.status === "draft"
-                      ? "This preview is private. Publishing shares only these two battle images."
-                      : battle.status === "hidden"
-                        ? "This battle is hidden for moderation review."
-                        : "This battle is no longer shared."}
-              </Body>
-              {battle.mine && (
-                <Body>
-                  Your recorded pick: Fit {battle.mine}. Votes are final;
-                  repeated taps do not add votes.
+              <Body style={{ textAlign: "center" }}>{battle.title}</Body>
+            </View>
+            {battle.options[0]?.url && (
+              <Image
+                source={{ uri: battle.options[0].url }}
+                contentFit="cover"
+                cachePolicy="none"
+                style={{
+                  height: 300,
+                  borderRadius: 26,
+                  backgroundColor: colors.white,
+                }}
+              />
+            )}
+            {battle.isOwner ? (
+              <>
+                <Button
+                  icon="share"
+                  title="Send invite again"
+                  onPress={() => void share()}
+                />
+                <Body style={{ textAlign: "center", fontSize: 13 }}>
+                  When your friend joins with their look, the battle goes live
+                  and you can share it for votes.
                 </Body>
+              </>
+            ) : !session ? (
+              <Button title="Sign in to accept" onPress={signIn} />
+            ) : (
+              <>
+                <Heading size={20}>Pick your look</Heading>
+                <LookPicker selected={pick} max={1} onChange={setPick} />
+                <Button
+                  icon="zap"
+                  title={busy ? "Joining…" : "Accept the battle"}
+                  disabled={busy || pick.length !== 1}
+                  onPress={() =>
+                    void action("join", {
+                      sourceKind: "job",
+                      sourceId: pick[0],
+                    })
+                  }
+                />
+                <Body style={{ fontSize: 12, textAlign: "center" }}>
+                  Anyone with the link will see your look, name and profile
+                  photo.
+                </Body>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Heading size={28}>{battle.title}</Heading>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <Chip
+                text={
+                  battle.mode === "public" ? "👥 Public votes" : "🙈 Anonymous"
+                }
+              />
+              <Chip text={`${total} ${total === 1 ? "vote" : "votes"}`} />
+              {battle.status === "closed" && <Chip text="Voting closed" />}
+              {battle.status === "draft" && <Chip text="Draft" />}
+              {["unpublished", "hidden"].includes(battle.status) && (
+                <Chip text="No longer shared" />
               )}
-              {canVote && (
+            </View>
+            <BattleCards
+              battle={battle}
+              choice={battle.mine ?? choice}
+              onSelect={canVote && !busy ? setChoice : undefined}
+              results={showResults}
+            />
+            {battle.mine && (
+              <Body style={{ textAlign: "center" }}>
+                You picked {battle.mine} ✓
+              </Body>
+            )}
+            {canVote &&
+              (battle.mode === "public" && !session ? (
+                <Button title="Sign in to vote" onPress={signIn} />
+              ) : (
                 <>
-                  {battle.mode === "public" &&
-                    (!session ? (
-                      <Button
-                        title="Sign in to cast a public vote"
-                        onPress={() => {
-                          void rememberBattleReturn(id).then(() =>
-                            router.push("/auth"),
-                          );
+                  {battle.mode === "public" && (
+                    <>
+                      <TextInput
+                        accessibilityLabel="Your name"
+                        value={name}
+                        onChangeText={setName}
+                        maxLength={40}
+                        placeholder="Your name"
+                        placeholderTextColor={colors.placeholder}
+                        style={{
+                          backgroundColor: colors.white,
+                          borderRadius: 18,
+                          padding: 16,
+                          fontFamily: fonts.body,
+                          fontSize: 16,
+                          color: colors.ink,
                         }}
                       />
-                    ) : (
-                      <>
-                        <Body>Your public display name</Body>
-                        <TextInput
-                          accessibilityLabel="Public voter display name"
-                          value={name}
-                          onChangeText={setName}
-                          maxLength={40}
-                          editable={!busy}
-                          placeholder="Choose a display name"
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: consent }}
+                        onPress={() => setConsent(!consent)}
+                        style={{
+                          flexDirection: "row",
+                          gap: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <View
                           style={{
-                            backgroundColor: colors.white,
-                            borderRadius: 18,
-                            padding: 16,
-                            fontFamily: fonts.body,
-                            fontSize: 17,
-                          }}
-                        />
-                        <Pressable
-                          accessibilityRole="checkbox"
-                          accessibilityLabel="Show my display name and vote publicly"
-                          accessibilityState={{ checked: consent }}
-                          onPress={() => setConsent(!consent)}
-                          style={{
-                            padding: 16,
-                            borderRadius: 18,
-                            backgroundColor: colors.chip,
+                            width: 22,
+                            height: 22,
+                            borderRadius: 6,
+                            borderWidth: 2,
+                            borderColor: colors.ink,
+                            backgroundColor: consent
+                              ? colors.ink
+                              : colors.white,
+                            alignItems: "center",
+                            justifyContent: "center",
                           }}
                         >
-                          <Body>
-                            {consent ? "☑" : "☐"} I agree that anyone with this
-                            link can see my display name and which fit I vote
-                            for. Display names are self-chosen.
-                          </Body>
-                        </Pressable>
-                      </>
-                    ))}
+                          {consent && (
+                            <Icon
+                              name="check"
+                              size={14}
+                              color={colors.yellow}
+                            />
+                          )}
+                        </View>
+                        <Body style={{ flex: 1, fontSize: 13 }}>
+                          Show my name with my vote
+                        </Body>
+                      </Pressable>
+                    </>
+                  )}
                   <Button
                     title={
                       busy
-                        ? "Recording…"
+                        ? "Voting…"
                         : choice
-                          ? `Vote ${choice}${battle.mode === "public" ? " publicly" : ""}`
-                          : "Choose Fit A or B above"
+                          ? `Vote for ${choice}`
+                          : "Tap a look to vote"
                     }
                     disabled={
                       busy ||
                       !choice ||
                       (battle.mode === "public" &&
-                        (!session || !consent || name.trim().length < 2))
+                        (!consent || name.trim().length < 2))
                     }
                     onPress={() =>
                       void action("vote", {
@@ -262,238 +342,126 @@ export default function BattleDetail() {
                       })
                     }
                   />
-                  {battle.mode === "anonymous" && (
-                    <Body style={{ fontSize: 13 }}>
-                      A browser identifier or account is used to reduce
-                      duplicate votes. No voter names are shown. Clearing
-                      browser data or using another device can bypass basic
-                      limits.
-                    </Body>
-                  )}
                 </>
-              )}
-              {battle.mode === "public" &&
-                ["published", "closed"].includes(battle.status) && (
-                  <>
-                    <Heading size={23}>Who voted for what</Heading>
-                    {!voters.length ? (
-                      <Body>No public votes yet.</Body>
-                    ) : (
-                      voters.map((voter) => (
-                        <View
-                          key={voter.id}
-                          style={{
-                            padding: 14,
-                            borderRadius: 18,
-                            backgroundColor: colors.white,
-                            flexDirection: "row",
-                            justifyContent: "space-between",
-                            gap: 10,
-                          }}
-                        >
-                          <Body style={{ flex: 1 }}>{voter.display_name}</Body>
-                          <Heading size={18}>Fit {voter.choice}</Heading>
-                        </View>
-                      ))
-                    )}
-                    {battle.voters.length === 40 && more && (
-                      <Button
-                        secondary
-                        title="Load more public votes"
-                        disabled={busy}
-                        onPress={() => void loadVoters()}
-                      />
-                    )}
-                  </>
-                )}
-              {battle.isOwner && battle.status === "draft" && (
-                <>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityLabel="Allow these two images to be shared publicly"
-                    accessibilityState={{ checked: publishConsent }}
-                    onPress={() => setPublishConsent(!publishConsent)}
+              ))}
+            {["published", "closed"].includes(battle.status) && (
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Button
+                  style={{ flex: 1 }}
+                  icon="share"
+                  title={battle.isOwner ? "Share for votes" : "Share"}
+                  onPress={() => void share()}
+                />
+                <Button
+                  secondary
+                  title="Copy link"
+                  onPress={() => void share(true)}
+                />
+              </View>
+            )}
+            {battle.mode === "public" && battle.voters.length > 0 && (
+              <View
+                style={{
+                  backgroundColor: colors.white,
+                  borderRadius: 22,
+                  padding: 16,
+                  gap: 10,
+                }}
+              >
+                <Heading size={18}>Who picked what</Heading>
+                {battle.voters.map((voter) => (
+                  <View
+                    key={voter.id}
                     style={{
-                      padding: 18,
-                      borderRadius: 20,
-                      backgroundColor: colors.chip,
+                      flexDirection: "row",
+                      justifyContent: "space-between",
                     }}
                   >
-                    <Body>
-                      {publishConsent ? "☑" : "☐"} I have permission to share
-                      both images publicly. Anyone with the link can view, copy
-                      or screenshot them. My other Closet images stay private.
-                      Voting mode stays {battle.mode}.
-                    </Body>
-                  </Pressable>
-                  {!battle.ready && (
-                    <Body>
-                      The images are not ready. Go back and retry the private
-                      preview with the same selections.
-                    </Body>
-                  )}
-                  <Button
-                    title={busy ? "Publishing…" : "Publish battle"}
-                    disabled={busy || !publishConsent || !battle.ready}
-                    onPress={() =>
-                      void action("publish", { consent: publishConsent })
-                    }
-                  />
-                </>
-              )}
-              {["published", "closed"].includes(battle.status) && (
-                <>
-                  <View style={{ flexDirection: "row", gap: 10 }}>
-                    <Button
-                      style={{ flex: 1 }}
-                      title="Share battle"
-                      icon="share"
-                      disabled={busy}
-                      onPress={() => void share()}
-                    />
-                    <Button
-                      secondary
-                      title="Copy link"
-                      disabled={busy}
-                      onPress={() => void share(true)}
-                    />
+                    <Body style={{ flex: 1 }}>{voter.display_name}</Body>
+                    <Heading size={16}>{voter.choice}</Heading>
                   </View>
-                  {!publicBattleUrl(id) && (
-                    <Body style={{ fontSize: 13 }}>
-                      The public hosting address is being connected. Local
-                      previews work on this computer; friend and story links
-                      will activate when hosting is ready.
-                    </Body>
-                  )}
-                  {publicBattleUrl(id) && (
-                    <TextInput
-                      accessibilityLabel="Battle voting link"
-                      value={publicBattleUrl(id)!}
-                      editable={false}
-                      selectTextOnFocus
-                      style={{
-                        backgroundColor: colors.white,
-                        padding: 14,
-                        borderRadius: 16,
-                        fontFamily: fonts.body,
-                        fontSize: 14,
-                        color: colors.ink,
-                      }}
-                    />
-                  )}
+                ))}
+              </View>
+            )}
+            {live && battle.isOwner && (
+              <Body style={{ fontSize: 13, textAlign: "center" }}>
+                Posting to a story? Screenshot this, add it to your story and
+                put the copied link in a Link sticker.
+              </Body>
+            )}
+          </>
+        )}
+        {!!message && <Body style={{ textAlign: "center" }}>{message}</Body>}
+        {battle && (battle.isOwner || battle.status !== "waiting") && (
+          <View style={{ alignItems: "center" }}>
+            {!more ? (
+              <TextLink title="More options" onPress={() => setMore(true)} />
+            ) : (
+              <View style={{ alignSelf: "stretch", gap: 8 }}>
+                {battle.isOwner && live && (
                   <Button
                     secondary
-                    title="Share in a story"
-                    onPress={() => setStory(!story)}
+                    title="Close voting"
+                    disabled={busy}
+                    onPress={() => void action("close")}
                   />
-                  {story && (
-                    <View
-                      style={{
-                        padding: 18,
-                        borderRadius: 22,
-                        backgroundColor: colors.chip,
-                        gap: 12,
-                      }}
-                    >
-                      <Heading size={23}>Let your story decide.</Heading>
-                      <Body>
-                        Take a screenshot of the battle cards, add it to your
-                        story, and paste the voting URL into a Link sticker.
-                        Viewers tap it to vote in their browser. This app does
-                        not post to your social accounts automatically.
+                )}
+                {battle.isOwner &&
+                  ["draft", "waiting", "published", "closed"].includes(
+                    battle.status,
+                  ) &&
+                  (stopping ? (
+                    <>
+                      <Body style={{ fontSize: 13, textAlign: "center" }}>
+                        People with the link lose access. Saved screenshots
+                        can’t be recalled. This can’t be undone.
                       </Body>
                       <Button
-                        title="Copy story voting link"
-                        onPress={() => void share(true)}
+                        title="Stop sharing"
+                        disabled={busy}
+                        onPress={() => void action("unpublish")}
                       />
-                    </View>
-                  )}
-                  <Button
-                    secondary
-                    title="Report this battle"
-                    onPress={() => setReporting(!reporting)}
-                  />
-                  {reporting && (
-                    <View style={{ gap: 8 }}>
-                      {[
-                        "Inappropriate image",
-                        "Harassment",
-                        "Privacy concern",
-                        "Other",
-                      ].map((reason) => (
-                        <Button
-                          key={reason}
-                          secondary
-                          disabled={busy}
-                          title={`Report: ${reason}`}
-                          onPress={() => void report(reason)}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
-              {battle.isOwner && (
-                <>
-                  {battle.status === "published" && (
+                    </>
+                  ) : (
                     <Button
                       secondary
-                      disabled={busy}
-                      title="Close voting"
-                      onPress={() => void action("close")}
+                      title="Stop sharing"
+                      onPress={() => setStopping(true)}
                     />
-                  )}
-                  {["draft", "published", "closed"].includes(battle.status) && (
-                    <>
-                      {confirmUnpublish ? (
-                        <>
-                          <Body>
-                            Stop sharing this battle? New visitors will lose
-                            access. Already downloaded images cannot be
-                            recalled; existing image links expire within one
-                            minute. This battle cannot be republished.
-                          </Body>
-                          <Button
-                            title="Confirm unpublish"
-                            disabled={busy}
-                            onPress={() => void action("unpublish")}
-                          />
-                          <Button
-                            secondary
-                            title="Keep battle"
-                            onPress={() => setConfirmUnpublish(false)}
-                          />
-                        </>
-                      ) : (
-                        <Button
-                          secondary
-                          disabled={busy}
-                          title="Unpublish battle"
-                          onPress={() => setConfirmUnpublish(true)}
-                        />
-                      )}
-                    </>
-                  )}
-                  <Button
-                    secondary
-                    title="My battles"
-                    onPress={() => router.push("/(tabs)/battles")}
-                  />
-                </>
-              )}
-              {!!message && <Body>{message}</Body>}
-              <Button
-                secondary
-                title="Refresh results"
-                disabled={busy || query.isFetching}
-                onPress={() => void query.refetch()}
-              />
-              <Body style={{ fontSize: 13 }}>
-                Sample illustrations and AI previews are labeled on each fit.
-                Voting and sharing use no AI credits.
-              </Body>
-            </>
-          )
+                  ))}
+                {!battle.isOwner &&
+                  (reporting ? (
+                    [
+                      "Inappropriate image",
+                      "Harassment",
+                      "Privacy concern",
+                      "Other",
+                    ].map((reason) => (
+                      <Button
+                        key={reason}
+                        secondary
+                        title={reason}
+                        disabled={busy}
+                        onPress={() =>
+                          void battleCall({ action: "report", id, reason })
+                            .then(() => {
+                              setReporting(false);
+                              setMessage("Thanks — we’ll review it.");
+                            })
+                            .catch((e) => setMessage(e.message))
+                        }
+                      />
+                    ))
+                  ) : (
+                    <Button
+                      secondary
+                      title="Report this battle"
+                      onPress={() => setReporting(true)}
+                    />
+                  ))}
+              </View>
+            )}
+          </View>
         )}
       </View>
     </Page>

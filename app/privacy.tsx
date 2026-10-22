@@ -26,8 +26,9 @@ export default function Privacy() {
         </Body>
         <Heading size={25}>Battle images become public by choice.</Heading>
         <Body>
-          Publishing requires your permission. Only the two selected battle
-          snapshots are shared. Anyone with the voting link can view them.
+          Sharing a battle is your choice. Only the looks you pick are shared,
+          and anyone with the voting link can view them. In a friend battle,
+          both players’ names and profile photos are shown with their looks.
           Unpublishing stops new access, but cannot remove screenshots or copies
           someone already saved.
         </Body>

@@ -24,9 +24,25 @@ async function hash(value: string) {
     x.toString(16).padStart(2, "0"),
   ).join("");
 }
+type Side = "a" | "b" | "c" | "d";
+const SIDES: Side[] = ["a", "b", "c", "d"];
+async function player(id: string | null) {
+  if (!id) return null;
+  const profile = checked(
+    await db.from("profiles").select("display_name").eq("id", id).maybeSingle(),
+  );
+  // Avatars are optional; a missing file just means no photo.
+  const photo = await db.storage
+    .from("avatars")
+    .createSignedUrl(`${id}/avatar.jpg`, 300);
+  return {
+    name: profile?.display_name?.trim() || null,
+    avatar: photo.data?.signedUrl ?? null,
+  };
+}
 async function copySource(
   battle: string,
-  side: "a" | "b",
+  side: Side,
   kind: string,
   id: string,
   owner: string,
@@ -116,7 +132,9 @@ async function view(
   );
   if (
     !row ||
-    (row.owner_id !== owner && !["published", "closed"].includes(row.status))
+    (row.owner_id !== owner &&
+      !(owner && row.b_owner_id === owner) &&
+      !["waiting", "published", "closed"].includes(row.status))
   )
     throw new Error("NOT_FOUND");
   const url = async (path: string | null) =>
@@ -125,9 +143,8 @@ async function view(
           await db.storage.from("battle-images").createSignedUrl(path, 60),
         )?.signedUrl ?? null)
       : null;
-  const [aUrl, bUrl, counts, mine] = await Promise.all([
-    url(row.a_path),
-    url(row.b_path),
+  const [urls, counts, mine, players] = await Promise.all([
+    Promise.all(SIDES.map((side) => url(row[`${side}_path`]))),
     rpc("battle_counts", { p_id: id }),
     db
       .from("battle_votes")
@@ -135,6 +152,9 @@ async function view(
       .eq("battle_id", id)
       .eq("voter_key", key)
       .maybeSingle(),
+    row.kind === "versus"
+      ? Promise.all([player(row.owner_id), player(row.b_owner_id)])
+      : null,
   ]);
   let voters: unknown[] = [];
   if (
@@ -157,13 +177,16 @@ async function view(
     mode: row.voting_mode,
     status: row.status,
     ready: row.ready,
+    kind: row.kind,
     isOwner: row.owner_id === owner,
-    aUrl,
-    bUrl,
-    aSample: row.a_sample,
-    bSample: row.b_sample,
-    aLabel: row.a_label,
-    bLabel: row.b_label,
+    isFriend: !!owner && row.b_owner_id === owner,
+    options: SIDES.map((side, i) => ({
+      side: side.toUpperCase(),
+      url: urls[i],
+      sample: row[`${side}_sample`] ?? null,
+      label: row[`${side}_label`],
+    })).filter((o) => o.url || o.sample),
+    players: players && { a: players[0], b: players[1] },
     counts,
     mine: checked(mine)?.choice ?? null,
     voters,
@@ -230,26 +253,31 @@ Deno.serve(async (req) => {
     await rpc("battle_rate", { p_key: "network:" + network, p_max: 120 });
     if (body.action === "create") {
       if (!owner) throw new Error("UNAUTHORIZED");
+      const sources = Array.isArray(body.sources) ? body.sources : [];
       if (
         typeof body.title !== "string" ||
         body.title.trim().length < 1 ||
         body.title.length > 100 ||
         !["anonymous", "public"].includes(String(body.mode)) ||
-        !uuid(body.aId) ||
-        !uuid(body.bId) ||
-        !["library", "job"].includes(String(body.aKind)) ||
-        !["library", "job"].includes(String(body.bKind))
+        !["choose", "versus"].includes(String(body.kind)) ||
+        sources.length < 1 ||
+        sources.length > 4 ||
+        !sources.every(
+          (x: { kind?: unknown; id?: unknown }) =>
+            ["library", "job"].includes(String(x?.kind)) && uuid(x?.id),
+        )
       )
         throw new Error("INVALID_REQUEST");
-      await rpc("create_battle", {
+      await rpc("create_battle_n", {
         p_owner: owner,
         p_id: id,
         p_title: body.title,
         p_mode: body.mode,
-        p_a_kind: body.aKind,
-        p_a: body.aId,
-        p_b_kind: body.bKind,
-        p_b: body.bId,
+        p_kind: body.kind,
+        p_sources: sources.map((x: { kind: string; id: string }) => ({
+          kind: x.kind,
+          id: x.id,
+        })),
       });
       const row = checked(
         await db
@@ -260,14 +288,21 @@ Deno.serve(async (req) => {
           .single(),
       );
       if (row && row.status === "draft" && !row.ready) {
-        const [a, b] = await Promise.all([
-          copySource(id, "a", row.source_a_kind, row.source_a_id, owner),
-          copySource(id, "b", row.source_b_kind, row.source_b_id, owner),
-        ]);
+        const copies = await Promise.all(
+          SIDES.filter((side) => row[`source_${side}_id`]).map((side) =>
+            copySource(
+              id,
+              side,
+              row[`source_${side}_kind`],
+              row[`source_${side}_id`],
+              owner!,
+            ),
+          ),
+        );
         checked(
           await db
             .from("battles")
-            .update({ ...a, ...b, ready: true })
+            .update({ ...Object.assign({}, ...copies), ready: true })
             .eq("id", id)
             .eq("status", "draft")
             .eq("ready", false),
@@ -286,8 +321,43 @@ Deno.serve(async (req) => {
       });
       return reply(await view(id, owner, key, 0));
     }
+    if (body.action === "join") {
+      if (!owner) throw new Error("UNAUTHORIZED");
+      if (
+        !["library", "job"].includes(String(body.sourceKind)) ||
+        !uuid(body.sourceId)
+      )
+        throw new Error("INVALID_REQUEST");
+      await rpc("join_battle", {
+        p_friend: owner,
+        p_id: id,
+        p_kind: body.sourceKind,
+        p_source: body.sourceId,
+      });
+      // Retries re-run the copy; the battle stays waiting until it succeeds.
+      const copy = await copySource(
+        id,
+        "b",
+        String(body.sourceKind),
+        body.sourceId,
+        owner,
+      );
+      checked(
+        await db
+          .from("battles")
+          .update({
+            ...copy,
+            status: "published",
+            published_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("status", "waiting")
+          .eq("b_owner_id", owner),
+      );
+      return reply(await view(id, owner, key, 0));
+    }
     if (body.action === "vote") {
-      if (!["A", "B"].includes(String(body.choice)))
+      if (!["A", "B", "C", "D"].includes(String(body.choice)))
         throw new Error("INVALID_REQUEST");
       await rpc("cast_battle_vote", {
         p_id: id,

@@ -141,12 +141,12 @@ export default function Account() {
                 )}
               </View>
               <Body style={{ fontSize: 13, textAlign: "center" }}>
-                Only you can see your photo for now.
+                Shown with your look when you battle a friend.
               </Body>
             </View>
             <Heading size={22}>What should we call you?</Heading>
             <Body>
-              Private until you choose to show it with a public battle vote.
+              Shown on friend battles and public votes you choose to make.
             </Body>
             <TextInput
               accessibilityLabel="Profile display name"

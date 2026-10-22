@@ -15,7 +15,8 @@ before(async () => {
  grant usage on schema auth to public;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,created_at timestamptz default now());
- create table public.try_on_jobs(id uuid primary key,owner_id uuid,status text);`);
+ create table public.try_on_jobs(id uuid primary key,owner_id uuid,status text);
+ create table public.profiles(id uuid primary key,deleting_at timestamptz);`);
   await db.exec(
     await readFile("supabase/migrations/202610190003_library.sql", "utf8"),
   );
@@ -25,7 +26,14 @@ before(async () => {
   await db.exec(
     await readFile("supabase/migrations/202610190005_battles.sql", "utf8"),
   );
+  await db.exec(
+    await readFile("supabase/migrations/202610220015_battle_modes.sql", "utf8"),
+  );
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
+  await db.query("insert into public.profiles values($1,null),($2,null)", [
+    owner,
+    other,
+  ]);
   await db.query(
     "insert into public.library_items(id,owner_id,kind,name,explore_image) values($1,$3,'inspiration','Sample A','navy'),($2,$3,'inspiration','Sample B','green')",
     [a, b, owner],
@@ -125,7 +133,7 @@ test("anonymous votes discard names, persist once and cannot change with repeate
   assert.deepEqual(
     (await service("select public.battle_counts($1) as counts", [id])).rows[0]!
       .counts,
-    { A: 1, B: 0 },
+    { A: 1, B: 0, C: 0, D: 0 },
   );
   await assert.rejects(
     user("select * from public.battle_votes"),
@@ -167,7 +175,7 @@ test("public votes require authenticated consent and a bounded display name", as
     "Style friend",
   );
   await assert.rejects(
-    service("select public.cast_battle_vote($1,'invalid','C','Friend',true)", [
+    service("select public.cast_battle_vote($1,'invalid','E','Friend',true)", [
       id,
     ]),
     /check constraint/,
@@ -188,7 +196,7 @@ test("closing and unpublishing stop votes without deleting results or permitting
   assert.deepEqual(
     (await service("select public.battle_counts($1) as counts", [id])).rows[0]!
       .counts,
-    { A: 0, B: 1 },
+    { A: 0, B: 1, C: 0, D: 0 },
   );
   await assert.rejects(
     service("select public.manage_battle($1,$2,'publish')", [owner, id]),
@@ -241,4 +249,80 @@ test("server rate limits are atomic and clients cannot bypass them", async () =>
     )
   ).rows[0]!;
   assert.equal(bucket.public, false);
+});
+
+const jobs = async (who: string, n: number) => {
+  const ids = Array.from({ length: n }, () => randomUUID());
+  for (const id of ids)
+    await db.query("insert into public.try_on_jobs values($1,$2,'completed')", [
+      id,
+      who,
+    ]);
+  return ids;
+};
+const createN = async (kind: string, sources: string[], who = owner) => {
+  const id = randomUUID();
+  await service(
+    "select public.create_battle_n($1,$2,'Date night?','anonymous',$3,$4)",
+    [
+      who,
+      id,
+      kind,
+      JSON.stringify(sources.map((x) => ({ kind: "job", id: x }))),
+    ],
+  );
+  return id;
+};
+test("choose battles take 2-4 distinct owned looks and accept votes for C and D", async () => {
+  const [j1, j2, j3, j4, j5] = await jobs(owner, 5);
+  const [theirs] = await jobs(other, 1);
+  await assert.rejects(createN("choose", [j1!]));
+  await assert.rejects(createN("choose", [j1!, j2!, j3!, j4!, j5!]));
+  await assert.rejects(createN("choose", [j1!, j1!]));
+  await assert.rejects(createN("choose", [j1!, theirs!]));
+  const id = await createN("choose", [j1!, j2!, j3!]);
+  await service(
+    "update public.battles set ready=true,a_path=id||'/a.jpg',b_path=id||'/b.jpg',c_path=id||'/c.jpg' where id=$1",
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+  await service("select public.cast_battle_vote($1,'v1','C',null,false)", [id]);
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'v2','D',null,false)", [id]),
+  );
+  const counts = (await service("select public.battle_counts($1) c", [id]))
+    .rows[0]!.c;
+  assert.deepEqual(counts, { A: 0, B: 0, C: 1, D: 0 });
+});
+test("versus battles wait for one friend to join with their own look, then go live", async () => {
+  const [mine, mine2] = await jobs(owner, 2);
+  const [theirs] = await jobs(other, 1);
+  await assert.rejects(createN("versus", [mine!, mine2!]));
+  const id = await createN("versus", [mine!]);
+  await service("update public.battles set ready=true where id=$1", [id]);
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+  assert.equal(
+    (await service("select status from public.battles where id=$1", [id]))
+      .rows[0]!.status,
+    "waiting",
+  );
+  const join = (who: string, job: string) =>
+    service("select public.join_battle($1,$2,'job',$3)", [who, id, job]);
+  await assert.rejects(join(owner, mine2!));
+  await assert.rejects(join(other, mine!));
+  await join(other, theirs!);
+  await join(other, theirs!);
+  const third = randomUUID();
+  await db.query("insert into auth.users values($1)", [third]);
+  await db.query("insert into public.profiles values($1,null)", [third]);
+  const [thirds] = await jobs(third, 1);
+  await assert.rejects(join(third, thirds!));
+  assert.equal(
+    (await user("select id from public.battles where id=$1", [id], other)).rows
+      .length,
+    1,
+  );
+  await assert.rejects(
+    service("select public.cast_battle_vote($1,'v1','A',null,false)", [id]),
+  );
 });

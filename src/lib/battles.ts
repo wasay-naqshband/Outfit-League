@@ -4,26 +4,33 @@ import * as SecureStore from "expo-secure-store";
 import * as Clipboard from "expo-clipboard";
 import { randomUUID } from "expo-crypto";
 import type { art } from "../data";
+export type Side = "A" | "B" | "C" | "D";
+export type Player = { name: string | null; avatar: string | null } | null;
 export type BattleView = {
   id: string;
   title: string;
   mode: "anonymous" | "public";
-  status: "draft" | "published" | "closed" | "unpublished" | "hidden";
+  kind: "choose" | "versus";
+  status:
+    "draft" | "waiting" | "published" | "closed" | "unpublished" | "hidden";
   ready: boolean;
   isOwner: boolean;
-  aUrl: string | null;
-  bUrl: string | null;
-  aSample: keyof typeof art | null;
-  bSample: keyof typeof art | null;
-  aLabel: string;
-  bLabel: string;
-  counts: { A: number; B: number };
-  mine: "A" | "B" | null;
-  voters: { id: number; choice: "A" | "B"; display_name: string }[];
+  isFriend: boolean;
+  options: {
+    side: Side;
+    url: string | null;
+    sample: keyof typeof art | null;
+    label: string;
+  }[];
+  players: { a: Player; b: Player } | null;
+  counts: Record<Side, number>;
+  mine: Side | null;
+  voters: { id: number; choice: Side; display_name: string }[];
 };
 export type BattleRow = {
   id: string;
   title: string;
+  kind: BattleView["kind"];
   voting_mode: BattleView["mode"];
   status: BattleView["status"];
   created_at: string;
@@ -52,13 +59,15 @@ async function browserToken() {
 const messages: Record<string, string> = {
   UNAUTHORIZED: "Please sign in to continue.",
   NOT_FOUND: "This battle is unavailable or no longer shared.",
+  INVALID_REQUEST: "Something was off with that request. Please try again.",
   INVALID_SOURCE:
     "Choose two different available images from your own Closet or completed AI looks.",
   RATE_LIMIT: "Too many requests. Please try again later.",
   PUBLIC_IDENTITY_REQUIRED:
     "Sign in, enter a display name and agree to show your name and vote.",
   VOTING_CLOSED: "Voting is closed for this battle.",
-  INVALID_STATE: "This battle has changed. Refresh to see its current status.",
+  INVALID_STATE:
+    "This battle has changed or someone already joined. Refresh to see it.",
   PUBLISH_CONSENT_REQUIRED:
     "Confirm that these two images can be shared publicly.",
 };
@@ -87,7 +96,7 @@ export async function myBattles(before?: string): Promise<BattleRow[]> {
   if (!supabase) throw new Error("Please sign in.");
   let query = supabase
     .from("battles")
-    .select("id,title,voting_mode,status,created_at")
+    .select("id,title,kind,voting_mode,status,created_at")
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(20);
@@ -152,7 +161,11 @@ export async function copyBattleLink(id: string) {
   } else if (!(await Clipboard.setStringAsync(url)))
     throw new Error("Select and copy the voting link shown below.");
 }
-export async function shareBattleLink(id: string, title: string) {
+export async function shareBattleLink(
+  id: string,
+  title: string,
+  text = `${title} — vote for your pick!`,
+) {
   const url = publicBattleUrl(id);
   if (!url)
     throw new Error(
@@ -162,14 +175,14 @@ export async function shareBattleLink(id: string, title: string) {
     if (navigator.share)
       await navigator.share({
         title: "Outfit League",
-        text: `${title} — which fit wins?`,
+        text,
         url,
       });
     else await copyBattleLink(id);
   } else
     await Share.share({
       title: "Outfit League",
-      message: `${title} — which fit wins? ${url}`,
+      message: `${text} ${url}`,
       url,
     });
 }
@@ -192,4 +205,39 @@ export async function takeBattleReturn() {
   } catch {
     return null;
   }
+}
+
+// Completed try-ons with a short-lived thumbnail, for picking battle looks.
+export async function myLooks(): Promise<{ id: string; url: string }[]> {
+  if (!supabase) return [];
+  const jobs = await supabase
+    .from("try_on_jobs")
+    .select("id,result_asset_id")
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (jobs.error) throw new Error("Your looks couldn’t load.");
+  const assets = await supabase
+    .from("private_assets")
+    .select("id,path")
+    .in(
+      "id",
+      jobs.data.map((job) => job.result_asset_id),
+    );
+  if (assets.error) throw new Error("Your looks couldn’t load.");
+  const paths = new Map(assets.data.map((x) => [x.id, x.path as string]));
+  const rows = jobs.data.flatMap((job) => {
+    const path = paths.get(job.result_asset_id);
+    return path ? [{ id: job.id as string, path }] : [];
+  });
+  if (!rows.length) return [];
+  const signed = await supabase.storage.from("tryon-private").createSignedUrls(
+    rows.map((row) => row.path),
+    600,
+  );
+  if (signed.error) throw new Error("Your looks couldn’t load.");
+  return rows.flatMap((row, i) => {
+    const url = signed.data[i]?.signedUrl;
+    return url ? [{ id: row.id, url }] : [];
+  });
 }
