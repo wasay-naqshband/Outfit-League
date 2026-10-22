@@ -26,10 +26,11 @@ import {
 } from "../components/ui";
 import { colors, fonts, gradients, shadow } from "../theme";
 import { STYLE_OPTIONS, styleLabel, useOnboarding } from "../lib/onboarding";
-import { pickPhoto } from "../lib/photos";
+import { disposePhoto, pickPhoto } from "../lib/photos";
 import { saveSavedPhoto } from "../lib/saved-photo";
 import { useTryOnDraft } from "../lib/tryon-draft";
 import { useApp } from "../lib/state";
+import type { LocalPhoto } from "../types/tryon";
 
 // Copy and option ids follow the design handoff (onboarding-content.json).
 const FREQUENCY = [
@@ -283,37 +284,52 @@ export default function Onboarding() {
   const { answers, update } = useOnboarding();
   const step = answers.step;
   const [busy, setBusy] = useState(false);
+  const [showPhotoGuide, setShowPhotoGuide] = useState(false);
+  const [chosenPhoto, setChosenPhoto] = useState<LocalPhoto | null>(null);
   const go = (next: number) => update({ step: next });
-  const back = () => step > 0 && step < BUILDING && go(step - 1);
+  const back = () => {
+    if (showPhotoGuide) {
+      setShowPhotoGuide(false);
+      setChosenPhoto(null);
+      void disposePhoto(chosenPhoto);
+    } else if (step > 0 && step < BUILDING) go(step - 1);
+  };
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       back();
-      return step > 0;
+      return showPhotoGuide || step > 0;
     });
     return () => sub.remove();
-  }, [step]);
+  }, [step, showPhotoGuide, chosenPhoto]);
 
-  async function addPhoto() {
-    const camera =
-      Platform.OS === "web"
-        ? false
-        : await new Promise<boolean | null>((resolve) =>
-            Alert.alert("Add your photo", undefined, [
-              { text: "Take a photo", onPress: () => resolve(true) },
-              { text: "Choose from library", onPress: () => resolve(false) },
-              { text: "Cancel", style: "cancel", onPress: () => resolve(null) },
-            ]),
-          );
-    if (camera === null) return;
+  async function choosePhoto(camera: boolean) {
     setBusy(true);
     try {
       const photo = await pickPhoto(camera);
       if (!photo) return;
-      draft.setPerson(photo);
+      void disposePhoto(chosenPhoto);
+      setChosenPhoto(photo);
+    } catch (e) {
+      Alert.alert(
+        "That photo didn’t work",
+        e instanceof Error ? e.message : "Please try another photo.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPhoto() {
+    if (!chosenPhoto) return;
+    setBusy(true);
+    try {
       if (session) {
-        await saveSavedPhoto(session.user.id, photo);
+        await saveSavedPhoto(session.user.id, chosenPhoto);
         await client.invalidateQueries({ queryKey: ["saved-photo"] });
       }
+      draft.setPerson(chosenPhoto);
+      setChosenPhoto(null);
+      setShowPhotoGuide(false);
       update({ step: BUILDING, tryOnPhotoAdded: true });
     } catch (e) {
       Alert.alert(
@@ -329,6 +345,146 @@ export default function Onboarding() {
   // Ring + checklist on the building step: 0 → 100 in about 3.5 s.
   const percent = useTicker(step === BUILDING ? 100 : 0, 35);
   const chat = useTicker(step === 4 ? 6 : 0, 400);
+
+  if (step === 7 && showPhotoGuide)
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.cream }}>
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 180,
+            gap: 18,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <RoundButton
+            name="arrow-left"
+            label="Back to photo step"
+            onPress={back}
+          />
+          <Heading size={30}>
+            {chosenPhoto
+              ? "Check your photo."
+              : "Make your try-on look like you."}
+          </Heading>
+          <Body>
+            {chosenPhoto
+              ? "Can you see your entire body clearly? If anything is cut off or blurry, choose another photo."
+              : "Take a moment to get this right. A clear photo helps us make a more accurate preview; a cropped or blurry one can look wrong."}
+          </Body>
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderRadius: 26,
+              padding: 14,
+              gap: 10,
+              ...shadow(0.06),
+            }}
+          >
+            <Image
+              source={
+                chosenPhoto
+                  ? { uri: chosenPhoto.uri }
+                  : require("../../assets/illustrations/good-tryon-photo.png")
+              }
+              contentFit="contain"
+              style={{
+                height: 220,
+                backgroundColor: "#F4F0E6",
+                borderRadius: 18,
+              }}
+              accessibilityLabel={
+                chosenPhoto
+                  ? "Your selected try-on photo"
+                  : "Example: one person standing front facing, fully visible from head to shoes, in bright even light"
+              }
+            />
+            <Text
+              style={{
+                fontFamily: fonts.bold,
+                fontSize: 15,
+                textAlign: "center",
+              }}
+            >
+              {chosenPhoto
+                ? "Your selected photo"
+                : "Example of a good try-on photo"}
+            </Text>
+          </View>
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderRadius: 24,
+              padding: 18,
+              gap: 12,
+            }}
+          >
+            {[
+              "Keep your head and shoes fully in frame, with space around you.",
+              "Face the camera with arms clear of your body. Use a timer or ask a friend.",
+              "Use bright, even light and a simple background. Avoid blur and filters.",
+            ].map((tip) => (
+              <View
+                key={tip}
+                style={{
+                  flexDirection: "row",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}
+              >
+                <Icon name="check" size={18} color="#127A55" />
+                <Body style={{ flex: 1, fontSize: 15 }}>{tip}</Body>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+        <View
+          style={{
+            position: "absolute",
+            left: 20,
+            right: 20,
+            bottom: insets.bottom + 16,
+            gap: 10,
+            backgroundColor: colors.cream,
+          }}
+        >
+          {chosenPhoto ? (
+            <>
+              <Button
+                title={busy ? "Saving your photo…" : "Use this photo"}
+                disabled={busy}
+                onPress={() => void confirmPhoto()}
+              />
+              <Button
+                title="Choose another"
+                secondary
+                disabled={busy}
+                onPress={() => void choosePhoto(false)}
+              />
+            </>
+          ) : (
+            <>
+              {Platform.OS !== "web" && (
+                <Button
+                  title="Take a photo"
+                  icon="camera"
+                  disabled={busy}
+                  onPress={() => void choosePhoto(true)}
+                />
+              )}
+              <Button
+                title="Choose from library"
+                icon="image"
+                secondary={Platform.OS !== "web"}
+                disabled={busy}
+                onPress={() => void choosePhoto(false)}
+              />
+            </>
+          )}
+        </View>
+      </View>
+    );
 
   if (step === 0)
     return (
@@ -934,14 +1090,14 @@ export default function Onboarding() {
       subtitle: "One good photo. Every outfit, on you, from now on.",
       cta: busy ? "Getting your photo ready…" : "Add my photo",
       ready: !busy,
-      next: () => void addPhoto(),
+      next: () => setShowPhotoGuide(true),
       body: (
         <View style={{ gap: 14 }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Take or choose a photo"
             disabled={busy}
-            onPress={() => void addPhoto()}
+            onPress={() => setShowPhotoGuide(true)}
             style={{
               backgroundColor: "#DCD5FF",
               borderRadius: 30,
@@ -966,7 +1122,7 @@ export default function Onboarding() {
               <Text style={{ fontFamily: fonts.bold, fontSize: 18 }}>
                 Take or choose a photo
               </Text>
-              <Body>A full-length mirror pic works great</Body>
+              <Body>See an example and photo tips first</Body>
             </View>
           </Pressable>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
