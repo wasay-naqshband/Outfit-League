@@ -8,7 +8,7 @@ Contact Outfit League at wasayiqbal2@gmail.com for support, account questions or
 
 ## Account and private collection
 
-We use your account email and authentication information to sign you in. Authentication is handled by Supabase. Your optional display name, Closet items, saved outfit inspiration, garment descriptions, notes, uploaded photos, generated previews and credit activity are stored to provide the features you choose. They are associated with your account and are not part of a public profile.
+We use your account email and authentication information to sign you in. Authentication is handled by Supabase. Your optional display name, profile photo, saved try-on photo, Closet items, saved outfit inspiration, garment descriptions, notes, uploaded photos, generated previews and credit activity are stored to provide the features you choose. They are associated with your account and are not part of a public profile.
 
 Your session is persisted on your device so you can remain signed in. The native app uses the operating system's Keychain/Keystore through SecureStore. The web app uses browser storage. Private image access uses expiring links; do not share those links. Authorized server operations and service providers process data needed to run the app.
 

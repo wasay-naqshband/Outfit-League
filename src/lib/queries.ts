@@ -3,6 +3,7 @@ import { fetchConfig, fetchHistory, fetchJob, fetchWallet } from "./tryon-api";
 import { useApp } from "./state";
 import { isTerminal } from "../types/tryon";
 import { supabase } from "./supabase";
+import { loadSavedPhoto } from "./saved-photo";
 export function useWallet() {
   const { session } = useApp();
   return useQuery({
@@ -72,5 +73,15 @@ export function useProfile() {
     },
     enabled: !!id && !!supabase,
     staleTime: 60000,
+  });
+}
+export function useSavedPhoto() {
+  const { session } = useApp();
+  const id = session?.user.id;
+  return useQuery({
+    queryKey: ["saved-photo", id],
+    queryFn: () => loadSavedPhoto(id!),
+    enabled: !!id && !!supabase,
+    staleTime: Infinity,
   });
 }

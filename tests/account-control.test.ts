@@ -25,6 +25,7 @@ before(async () => {
     "202610200008_live_catalog",
     "202610200009_catalog_approval_privacy",
     "202610220013_avatars",
+    "202610220014_saved_person_photo",
   ])
     await db.exec(await readFile(`supabase/migrations/${file}.sql`, "utf8"));
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
@@ -295,5 +296,23 @@ test("profile photos are owner-only and found by account deletion", async () => 
       ])
     ).rows,
     [{ name: mine }],
+  );
+});
+test("saved try-on photos are owner-only and found by account deletion", async () => {
+  const me = randomUUID();
+  await db.query("insert into auth.users values($1)", [me]);
+  const insert =
+    "insert into storage.objects(bucket_id,name) values('saved-photos',$1)";
+  await user(insert, [me + "/person.jpg"], me);
+  await assert.rejects(user(insert, [other + "/person.jpg"], me));
+  await assert.rejects(user(insert, [me + "/avatar.jpg"], me));
+  assert.deepEqual(
+    (
+      await db.query(
+        "select name from account_storage_paths($1,'saved-photos')",
+        [me],
+      )
+    ).rows,
+    [{ name: me + "/person.jpg" }],
   );
 });

@@ -138,6 +138,11 @@ export default function Settings() {
               onPress={() => router.push("/credits")}
             />
             <Row
+              icon="camera"
+              label="Your try-on photo"
+              onPress={() => router.push("/my-photo")}
+            />
+            <Row
               icon="clock"
               label="Try-on history"
               onPress={() => router.push("/history")}

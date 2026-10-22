@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { analytics } from "../../src/lib/analytics";
 import { Alert, Modal, Platform, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -22,7 +22,12 @@ import {
 import { colors, gradients } from "../../src/theme";
 import { useApp } from "../../src/lib/state";
 import { useTryOnDraft } from "../../src/lib/tryon-draft";
-import { useHistory, useTryOnConfig, useWallet } from "../../src/lib/queries";
+import {
+  useHistory,
+  useSavedPhoto,
+  useTryOnConfig,
+  useWallet,
+} from "../../src/lib/queries";
 import { pickPhoto } from "../../src/lib/photos";
 import { callTryOn, fetchHistory, uploadPhoto } from "../../src/lib/tryon-api";
 import { friendlyError, isTerminal } from "../../src/types/tryon";
@@ -74,6 +79,25 @@ export default function TryOn() {
   const submitted = useRef(false);
   const startedAt = useRef(0);
   const active = history.data?.find((job) => !isTerminal(job.status));
+  const saved = useSavedPhoto();
+  const removed = useRef(false);
+  // Keep the saved try-on photo in place (also after a try-on clears the
+  // draft) unless the person removed it here.
+  useEffect(() => {
+    if (!draft.person && saved.data && !removed.current)
+      draft.setPerson(saved.data);
+  }, [saved.data, draft.person]);
+  // The person photo can change from the My photo screen; drop an upload made
+  // for the previous one so it is never reused.
+  useEffect(() => {
+    const current = attempt.current;
+    if (current?.person && !current.started) {
+      void callTryOn({ action: "remove-upload", id: current.person }).catch(
+        () => {},
+      );
+      current.person = undefined;
+    }
+  }, [draft.person]);
   async function discardAttempt() {
     const current = attempt.current;
     if (current?.started) {
@@ -116,6 +140,7 @@ export default function TryOn() {
   async function remove(kind: "person" | "garment") {
     try {
       if (!(await discardAttempt())) return;
+      if (kind === "person") removed.current = true;
       (kind === "person" ? draft.setPerson : draft.setGarment)(null);
     } catch {
       setError("Please check your connection before replacing these photos.");
@@ -231,7 +256,7 @@ export default function TryOn() {
             photo={draft.person}
             disabled={busy}
             onChoose={() => {
-              void select("person");
+              router.push("/my-photo");
             }}
             onRemove={() => {
               void remove("person");
