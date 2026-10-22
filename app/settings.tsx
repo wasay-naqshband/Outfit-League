@@ -143,6 +143,11 @@ export default function Settings() {
               onPress={() => router.push("/my-photo")}
             />
             <Row
+              icon="sparkles"
+              label="Your style"
+              onPress={() => router.push("/styles")}
+            />
+            <Row
               icon="clock"
               label="Try-on history"
               onPress={() => router.push("/history")}

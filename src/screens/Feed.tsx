@@ -15,12 +15,24 @@ import {
 } from "../components/ui";
 import { explorePage, cardOutfit } from "../lib/explore";
 import { useApp } from "../lib/state";
+import { styleLabel, useOnboarding } from "../lib/onboarding";
+
+const CHIPS = ["Trending", "Streetwear", "Minimal", "Y2K"];
 
 export default function Feed() {
   const { session } = useApp();
   const [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [selected, setSelected] = useState("Trending");
+  // Open on the first picked style Explore has a filter for.
+  const picked = useOnboarding()
+    .answers.styles.map(styleLabel)
+    .find((label) => CHIPS.includes(label));
+  const opened = React.useRef(false);
+  useEffect(() => {
+    if (picked && !opened.current) setSelected(picked);
+    opened.current = true;
+  }, [picked]);
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search), 300);
     return () => clearTimeout(timer);
@@ -41,7 +53,7 @@ export default function Feed() {
         title="Explore"
         query={search}
         onQuery={setSearch}
-        chips={["Trending", "Streetwear", "Minimal", "Y2K"]}
+        chips={CHIPS}
         selected={selected}
         onSelect={setSelected}
       />

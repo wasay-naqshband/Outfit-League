@@ -31,9 +31,13 @@ export function TryOnDraftProvider({
     },
     [garment],
   );
+  const owner = React.useRef(session?.user.id);
   useEffect(() => {
-    setPerson(null);
-    setGarment(null);
+    if (owner.current) {
+      setPerson(null);
+      setGarment(null);
+    }
+    owner.current = session?.user.id;
   }, [session?.user.id]);
   return (
     <Context.Provider
