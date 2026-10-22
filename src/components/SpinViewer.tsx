@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, View } from "react-native";
-import { useVideoPlayer, VideoView } from "expo-video";
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  View,
+} from "react-native";
+import { Image } from "expo-image";
+import { useVideoPlayer, VideoView, type VideoThumbnail } from "expo-video";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Icon } from "./ui";
@@ -8,6 +15,42 @@ import { colors, gradients } from "../theme";
 
 const MAX_ZOOM = 3;
 const TAP = 8;
+const FRAMES = 60;
+
+// Seeking a video on every move stutters (it decodes from the previous
+// keyframe), so the drag flips through stills grabbed once up front.
+async function grabFrames(
+  player: ReturnType<typeof useVideoPlayer>,
+  source: string,
+  start: number,
+): Promise<(string | VideoThumbnail)[]> {
+  const times = (duration: number) =>
+    Array.from(
+      { length: FRAMES },
+      (_, i) => start + (i * (duration - start)) / FRAMES,
+    );
+  if (Platform.OS !== "web")
+    return player.generateThumbnailsAsync(times(player.duration), {
+      maxWidth: 540,
+    });
+  const v = document.createElement("video");
+  v.crossOrigin = "anonymous";
+  v.muted = true;
+  v.preload = "auto";
+  v.src = source;
+  await new Promise((ok, fail) => ((v.onloadeddata = ok), (v.onerror = fail)));
+  const c = document.createElement("canvas");
+  c.width = 540;
+  c.height = Math.round((540 * v.videoHeight) / v.videoWidth);
+  const out: string[] = [];
+  for (const t of times(v.duration)) {
+    v.currentTime = t;
+    await new Promise((ok) => (v.onseeked = ok));
+    c.getContext("2d")!.drawImage(v, 0, 0, c.width, c.height);
+    out.push(c.toDataURL("image/jpeg", 0.85));
+  }
+  return out;
+}
 
 // Full-screen turntable video (shown in a Modal, so no page scroll or iOS
 // back-swipe can steal the drag): it loops on its own; drag pauses it and
@@ -34,7 +77,18 @@ export function SpinViewer({
   const width = useRef(1);
   const scale = useRef(new Animated.Value(1)).current;
   const pan = useRef(new Animated.ValueXY()).current;
-  const g = useRef({ scale: 1, x: 0, y: 0, pinch: 0, tap: 0, from: start });
+  const g = useRef({
+    scale: 1,
+    x: 0,
+    y: 0,
+    pinch: 0,
+    tap: 0,
+    from: start,
+    frame: -1,
+  });
+  const [frames, setFrames] = useState<(string | VideoThumbnail)[]>([]);
+  const [frame, setFrame] = useState<number | null>(null);
+  const grabbing = useRef(false);
 
   // Skip the intro once loaded (seeking earlier is ignored), and loop past it.
   useEffect(() => {
@@ -42,12 +96,21 @@ export function SpinViewer({
       player.currentTime = start;
       player.play();
     };
+    const onReady = () => {
+      if (player.currentTime < start) restart();
+      if (grabbing.current) return;
+      grabbing.current = true;
+      // Without stills (e.g. a blocked canvas) the drag falls back to seeking.
+      grabFrames(player, source, start).then(setFrames, () => {});
+    };
+    // The player may already be ready before this listener is attached.
+    if (player.status === "readyToPlay") onReady();
     const ready = player.addListener("statusChange", ({ status }) => {
-      if (status === "readyToPlay" && player.currentTime < start) restart();
+      if (status === "readyToPlay") onReady();
     });
     const end = player.addListener("playToEnd", restart);
     return () => (ready.remove(), end.remove());
-  }, [player, start]);
+  }, [player, start, source]);
 
   const zoomTo = (to: number) => {
     g.current.scale = to;
@@ -68,6 +131,7 @@ export function SpinViewer({
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           g.current.pinch = 0;
+          g.current.frame = -1;
           g.current.from = player.currentTime;
           player.pause();
           player.scrubbingModeOptions = { scrubbingModeEnabled: true };
@@ -85,11 +149,22 @@ export function SpinViewer({
           } else {
             const span = Math.max(0.1, player.duration - start);
             const t = g.current.from - start - (s.dx / width.current) * span;
-            player.currentTime = start + (((t % span) + span) % span);
+            const at = ((t % span) + span) % span;
+            if (!frames.length) player.currentTime = start + at;
+            else {
+              g.current.frame = Math.round((at / span) * FRAMES) % FRAMES;
+              setFrame(g.current.frame);
+            }
           }
         },
         onPanResponderRelease: (_, s) => {
           player.scrubbingModeOptions = { scrubbingModeEnabled: false };
+          if (g.current.frame >= 0) {
+            // Park the video on the same angle, then drop the still once it has.
+            const span = Math.max(0.1, player.duration - start);
+            player.currentTime = start + (g.current.frame * span) / FRAMES;
+            setTimeout(() => setFrame(null), 400);
+          }
           if (g.current.pinch)
             return zoomTo(g.current.scale < 1.1 ? 1 : g.current.scale);
           // Only a still, quick touch counts as a tap; drags never zoom.
@@ -105,7 +180,7 @@ export function SpinViewer({
             ((g.current.x += s.dx), (g.current.y += s.dy));
         },
       }),
-    [player, start],
+    [player, start, frames],
   );
 
   return (
@@ -126,6 +201,14 @@ export function SpinViewer({
           style={{ width: "100%", height: "100%" }}
           accessibilityLabel="AI 360° preview video"
         />
+        {frame !== null && (
+          <Image
+            source={frames[frame]}
+            contentFit="contain"
+            pointerEvents="none"
+            style={{ position: "absolute", width: "100%", height: "100%" }}
+          />
+        )}
       </Animated.View>
       <View
         pointerEvents="box-none"
