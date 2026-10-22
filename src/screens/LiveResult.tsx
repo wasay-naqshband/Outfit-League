@@ -21,7 +21,8 @@ import { SpinViewer } from "../components/SpinViewer";
 import { CookingLoader, SPIN_MESSAGES } from "../components/CookingLoader";
 import { useApp } from "../lib/state";
 import { useJob } from "../lib/queries";
-import { saveLook, startSpin } from "../lib/tryon-api";
+import { rateLook, saveLook, startSpin } from "../lib/tryon-api";
+import { RatingCard } from "../components/Stylist";
 import { sharePreview } from "../lib/share-image";
 import { friendlyError } from "../types/tryon";
 import { colors, gradients, shadow } from "../theme";
@@ -71,6 +72,22 @@ export default function LiveResult({ id }: { id: string }) {
         await startSpin(id),
       );
       await client.invalidateQueries({ queryKey: ["wallet"] });
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function rate() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { rating } = await rateLook(id);
+      client.setQueryData(
+        ["tryon-job", session?.user.id, id],
+        (old: typeof view) => old && { ...old, job: { ...old.job, rating } },
+      );
     } catch (e) {
       setError(friendlyError(e));
     } finally {
@@ -276,6 +293,17 @@ export default function LiveResult({ id }: { id: string }) {
                   {error}
                 </Body>
               )}
+              {view.job.rating ? (
+                <RatingCard rating={view.job.rating} />
+              ) : (
+                <Button
+                  icon="sparkles"
+                  title={busy ? "Please wait…" : "Rate my fit · free"}
+                  onPress={() => {
+                    void rate();
+                  }}
+                />
+              )}
               <Button
                 secondary
                 title="Your private look history"
@@ -290,7 +318,8 @@ export default function LiveResult({ id }: { id: string }) {
                 }
               />
               <Button
-                title="Try another top"
+                secondary
+                title="Try another outfit"
                 icon="sparkles"
                 onPress={() => router.replace("/(tabs)/try-on")}
               />

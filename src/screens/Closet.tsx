@@ -62,6 +62,33 @@ export default function Closet() {
         }
       />
       <View style={{ padding: 18, gap: 18 }}>
+        {session && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="AI Stylist: what should I wear?"
+            onPress={() => router.push("/stylist")}
+            style={{
+              backgroundColor: colors.ink,
+              borderRadius: 28,
+              padding: 20,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              ...shadow(0.12),
+            }}
+          >
+            <Icon name="sparkles" size={30} color={colors.yellow} />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Heading size={21} style={{ color: colors.white }}>
+                What should I wear?
+              </Heading>
+              <Body style={{ fontSize: 13, color: colors.white, opacity: 0.8 }}>
+                Your AI stylist picks from your closet and finds your colours.
+              </Body>
+            </View>
+            <Icon name="chevron-right" size={20} color={colors.white} />
+          </Pressable>
+        )}
         {!session ? (
           <>
             <LinearGradient

@@ -23,7 +23,7 @@ test("source import accepts web links and rejects executable, credential-bearing
 test("incoming native shares route to import while auth callback parameters remain intact", () => {
   assert.match(
     redirectSystemPath({ path: "outfitleague://expo-sharing", initial: true }),
-    /^\/library-edit\?kind=inspiration&shared=\d+$/,
+    /^\/try-on\?shared=\d+$/,
   );
   const callback = "outfitleague://auth-callback?code=test&recovery=1";
   assert.equal(redirectSystemPath({ path: callback, initial: true }), callback);

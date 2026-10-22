@@ -1,6 +1,10 @@
 import { supabase } from "./supabase";
 import { decode } from "base64-arraybuffer";
 import { analytics } from "./analytics";
+import { Platform } from "react-native";
+import { randomUUID } from "expo-crypto";
+import * as FileSystem from "expo-file-system/legacy";
+import { preparePhoto } from "./photos";
 import type {
   JobView,
   LocalPhoto,
@@ -89,3 +93,49 @@ export async function saveLook(id: string, saved: boolean) {
   if (error || !data) throw new Error("SAVE_FAILED");
   if (saved) analytics.track("look_saved", { source: "ai" }, `look:${id}`);
 }
+// Product photo from a store link (Zara, H&M, Shein…), as a private JPEG.
+export async function imageFromLink(url: string): Promise<LocalPhoto> {
+  const photo = await callTryOn<{ type: string; data: string }>({
+    action: "link",
+    url,
+  });
+  if (Platform.OS === "web")
+    return preparePhoto(`data:${photo.type};base64,${photo.data}`);
+  const file = `${FileSystem.cacheDirectory}link-${randomUUID()}`;
+  await FileSystem.writeAsStringAsync(file, photo.data, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  try {
+    return await preparePhoto(file);
+  } finally {
+    await FileSystem.deleteAsync(file, { idempotent: true }).catch(() => {});
+  }
+}
+export type Rating = {
+  score: number;
+  headline: string;
+  good: string[];
+  tips: string[];
+};
+export type Swatch = { name: string; hex: string };
+export type ColorProfile = {
+  season: string;
+  summary: string;
+  best: Swatch[];
+  neutrals: Swatch[];
+  avoid: Swatch[];
+  tips: string[];
+};
+export type OutfitPick = {
+  title: string;
+  why: string;
+  items: string[];
+  missing: string[];
+  tips: string[];
+};
+export const rateLook = (id: string) =>
+  callTryOn<{ rating: Rating }>({ action: "rate", id });
+export const colorProfile = (refresh = false) =>
+  callTryOn<{ colors: ColorProfile }>({ action: "colors", refresh });
+export const pickOutfit = (occasion: string) =>
+  callTryOn<{ outfit: OutfitPick }>({ action: "outfit", occasion });

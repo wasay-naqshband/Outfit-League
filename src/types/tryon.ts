@@ -10,6 +10,7 @@ export type TryOnJob = {
   person_asset_id: string;
   garment_asset_id: string;
   result_asset_id: string | null;
+  rating?: import("../lib/tryon-api").Rating | null;
 };
 export type JobView = {
   job: TryOnJob;
@@ -43,7 +44,13 @@ export const isTerminal = (status: JobStatus) =>
 export const errorMessages: Record<string, string> = {
   UNAUTHORIZED: "Please sign in again to continue.",
   NO_CREDITS:
-    "You’ve used your available try-ons. Purchases aren’t available yet.",
+    "You don’t have enough credits for this try-on. Each outfit piece uses one credit.",
+  LINK_FAILED:
+    "We couldn’t open that link. Check it’s a product page, or screenshot the item and choose the photo instead.",
+  LINK_NO_IMAGE:
+    "We couldn’t find a clothing photo on that page. Screenshot the item and choose the photo instead.",
+  STYLIST_FAILED: "The stylist couldn’t answer just now. Please try again.",
+  NO_SAVED_PHOTO: "Add your try-on photo first, then we can find your colours.",
   ACTIVE_JOB:
     "You already have a try-on in progress. Open your recent try-ons to resume it.",
   RATE_LIMIT: "That’s a few too many requests. Please try again later.",

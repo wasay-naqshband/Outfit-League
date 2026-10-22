@@ -13,6 +13,13 @@ import { FashnProvider, GenlookProvider } from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
+import { linkImage } from "../_shared/link-image.ts";
+import {
+  colorAnalysis,
+  pickOutfit,
+  rateFit,
+  type ClosetItem,
+} from "../_shared/stylist.ts";
 
 const env = (name: string) => Deno.env.get(name) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
@@ -45,7 +52,10 @@ type Job = {
   owner_id: string;
   person_asset_id: string;
   garment_asset_id: string;
+  extra_garments: string[];
+  garment_parts: string[];
   result_asset_id: string | null;
+  rating: unknown;
   status: string;
   provider_id: string | null;
   expires_at: string;
@@ -110,11 +120,17 @@ async function submitJob(job: Job) {
   const claimed = await rpc("claim_tryon", { p_job: job.id });
   if (!claimed) return;
   try {
-    const [person, garment] = await Promise.all([
-      readInput(job.person_asset_id, job.owner_id),
-      readInput(job.garment_asset_id, job.owner_id),
-    ]);
-    const prediction = await provider.submit(person, garment);
+    const [person, garment, ...more] = await Promise.all(
+      [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
+        (id) => readInput(id, job.owner_id),
+      ),
+    );
+    const prediction = await provider.submit(
+      person,
+      garment,
+      more,
+      job.garment_parts,
+    );
     await rpc("attach_prediction", {
       p_job: job.id,
       p_prediction:
@@ -270,6 +286,7 @@ async function removeJob(job: Job) {
   const ids = [
     job.person_asset_id,
     job.garment_asset_id,
+    ...job.extra_garments,
     job.result_asset_id,
     spin?.sheet_asset_id,
   ].filter(Boolean);
@@ -354,6 +371,11 @@ const exposed = new Set([
   "RATE_LIMIT",
   "IDEMPOTENCY_CONFLICT",
   "PROVIDER_NOT_CONFIGURED",
+  "PROVIDER_BUSY",
+  "LINK_FAILED",
+  "LINK_NO_IMAGE",
+  "STYLIST_FAILED",
+  "NO_SAVED_PHOTO",
 ]);
 Deno.serve(async (req) => {
   const headers = cors(req);
@@ -419,7 +441,10 @@ Deno.serve(async (req) => {
                 ",garment_asset_id.eq." +
                 asset.id +
                 ",result_asset_id.eq." +
-                asset.id,
+                asset.id +
+                ",extra_garments.cs.{" +
+                asset.id +
+                "}",
             )
             .limit(1),
         );
@@ -491,7 +516,10 @@ Deno.serve(async (req) => {
               ",garment_asset_id.eq." +
               asset.id +
               ",result_asset_id.eq." +
-              asset.id,
+              asset.id +
+              ",extra_garments.cs.{" +
+              asset.id +
+              "}",
           )
           .limit(1),
       );
@@ -502,11 +530,20 @@ Deno.serve(async (req) => {
     }
     if (body.action === "start") {
       if (!enabled()) throw new Error("PROVIDER_NOT_CONFIGURED");
+      const extra = body.extra ?? [],
+        parts = body.parts ?? [];
       if (
         !uuid(body.key) ||
         !uuid(body.person) ||
         !uuid(body.garment) ||
-        body.consent !== CONSENT_VERSION
+        body.consent !== CONSENT_VERSION ||
+        !Array.isArray(extra) ||
+        extra.length > 2 ||
+        !extra.every(uuid) ||
+        !Array.isArray(parts) ||
+        !parts.every((part) => ["top", "bottom", "outer"].includes(part)) ||
+        // Only Genlook wears several pieces at once.
+        (extra.length && providerName !== "Genlook")
       )
         throw new Error("INVALID_REQUEST");
       const reserved = await rpc("reserve_tryon", {
@@ -515,6 +552,8 @@ Deno.serve(async (req) => {
         p_person: body.person,
         p_garment: body.garment,
         p_consent: body.consent,
+        p_extra: extra,
+        p_parts: parts,
       });
       if (reserved.created) await submitJob(reserved.job);
       return reply(await resultView(await ownedJob(reserved.job.id, owner)));
@@ -534,6 +573,87 @@ Deno.serve(async (req) => {
       // Generation outlives this request; the app polls "status" for the result.
       if (reserved.created) EdgeRuntime.waitUntil(makeSpin(job, reserved.spin));
       return reply(await resultView(job));
+    }
+    if (body.action === "link") {
+      await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
+      const photo = await linkImage(body.url).catch((error) => {
+        throw new Error(
+          error instanceof Error && error.message === "LINK_NO_IMAGE"
+            ? "LINK_NO_IMAGE"
+            : "LINK_FAILED",
+        );
+      });
+      return reply({ type: photo.type, data: toBase64(photo.data) });
+    }
+    if (["rate", "colors", "outfit"].includes(String(body.action))) {
+      if (!env("GEMINI_API_KEY")) throw new Error("PROVIDER_NOT_CONFIGURED");
+      const key = env("GEMINI_API_KEY");
+      if (body.action === "rate") {
+        const job = await ownedJob(body.id, owner);
+        if (job.status !== "completed") throw new Error("NOT_FOUND");
+        if (job.rating) return reply({ rating: job.rating });
+        await rpc("battle_rate", { p_key: "stylist:" + owner, p_max: 40 });
+        const rating = await rateFit(
+          key,
+          await readInput(job.result_asset_id!, owner),
+        );
+        checked(
+          await db.from("try_on_jobs").update({ rating }).eq("id", job.id),
+        );
+        return reply({ rating });
+      }
+      const profile = checked(
+        await db
+          .from("profiles")
+          .select("color_profile")
+          .eq("id", owner)
+          .single(),
+      ) as { color_profile: { season?: string } | null };
+      if (body.action === "colors") {
+        if (profile.color_profile && body.refresh !== true)
+          return reply({ colors: profile.color_profile });
+        await rpc("battle_rate", { p_key: "stylist:" + owner, p_max: 40 });
+        const saved = await db.storage
+          .from("saved-photos")
+          .download(owner + "/person.jpg");
+        if (saved.error || !saved.data || saved.data.size > MAX_IMAGE_BYTES)
+          throw new Error("NO_SAVED_PHOTO");
+        const bytes = new Uint8Array(await saved.data.arrayBuffer());
+        validateJpeg(bytes);
+        const colors = await colorAnalysis(
+          key,
+          "data:image/jpeg;base64," + toBase64(bytes),
+        );
+        checked(
+          await db
+            .from("profiles")
+            .update({ color_profile: colors })
+            .eq("id", owner),
+        );
+        return reply({ colors });
+      }
+      const occasion =
+        typeof body.occasion === "string" ? body.occasion.trim() : "";
+      if (!occasion || occasion.length > 300)
+        throw new Error("INVALID_REQUEST");
+      await rpc("battle_rate", { p_key: "stylist:" + owner, p_max: 40 });
+      const closet: ClosetItem[] = required(
+        await db
+          .from("library_items")
+          .select("id,name,category,color,brand,tags")
+          .eq("owner_id", owner)
+          .eq("kind", "wardrobe")
+          .order("created_at", { ascending: false })
+          .limit(150),
+      );
+      return reply({
+        outfit: await pickOutfit(
+          key,
+          occasion,
+          closet,
+          profile.color_profile?.season ?? null,
+        ),
+      });
     }
     if (body.action === "delete") {
       await removeJob(await ownedJob(body.id, owner));

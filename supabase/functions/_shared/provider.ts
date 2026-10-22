@@ -11,10 +11,21 @@ export type Prediction = {
   error?: string;
 };
 export interface TryOnProvider {
-  submit(person: string, garment: string): Promise<string>;
+  // more/parts: extra outfit pieces and the body part of every piece, in order.
+  submit(
+    person: string,
+    garment: string,
+    more?: string[],
+    parts?: string[],
+  ): Promise<string>;
   status(id: string): Promise<Prediction>;
 }
 
+const PART_TITLES: Record<string, string> = {
+  top: "Top or dress",
+  bottom: "Bottoms (trousers, jeans, shorts or skirt)",
+  outer: "Outer layer (jacket or coat)",
+};
 // No automatic submission retries: an uncertain POST may already cost a credit.
 export class GenlookProvider implements TryOnProvider {
   constructor(
@@ -27,20 +38,28 @@ export class GenlookProvider implements TryOnProvider {
       return bytes;
     },
   ) {}
-  async submit(person: string, garment: string): Promise<string> {
+  async submit(
+    person: string,
+    garment: string,
+    more: string[] = [],
+    parts: string[] = [],
+  ): Promise<string> {
+    const garments = [garment, ...more];
     const form = new FormData();
     form.set(
       "data",
       JSON.stringify({
-        products: [
-          {
-            title: "Uploaded clothing item",
-            description:
-              "Reproduce the clothing in the supplied garment photo, including its color, pattern and cut.",
+        // Titles tell Genlook which garment to take from a photo of a model
+        // wearing a whole outfit (common on store pages).
+        products: garments.map((_, i) => {
+          const title = PART_TITLES[parts[i] ?? ""] ?? "Uploaded clothing item";
+          return {
+            title,
+            description: `Reproduce only the ${title.toLowerCase()} in the supplied photo, including its color, pattern and cut.`,
             validForDays: 1,
-            images: [{ source: { fileKey: "garment" } }],
-          },
-        ],
+            images: [{ source: { fileKey: i ? "garment" + i : "garment" } }],
+          };
+        }),
         person: { image: { source: { fileKey: "person" } } },
         output: { keepForDays: 1, aiLabel: true },
       }),
@@ -50,10 +69,12 @@ export class GenlookProvider implements TryOnProvider {
       new Blob([decodeResult(person) as BlobPart], { type: "image/jpeg" }),
       "person.jpg",
     );
-    form.set(
-      "garment",
-      new Blob([decodeResult(garment) as BlobPart], { type: "image/jpeg" }),
-      "garment.jpg",
+    garments.forEach((image, i) =>
+      form.set(
+        i ? "garment" + i : "garment",
+        new Blob([decodeResult(image) as BlobPart], { type: "image/jpeg" }),
+        "garment.jpg",
+      ),
     );
     const data = await responseJson(
       await this.request("https://api.genlook.app/tryon/v1/try-on", {
