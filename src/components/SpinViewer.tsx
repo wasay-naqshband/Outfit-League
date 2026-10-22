@@ -253,6 +253,28 @@ export function SpinViewer({
           </Body>
         </View>
       </View>
+      {/* Google's own "AI" mark is burned in and clipped at the frame edge,
+          so show a full label of ours where it can always be read. */}
+      <View
+        pointerEvents="none"
+        style={{
+          position: "absolute",
+          alignSelf: "center",
+          bottom: insets.bottom + 20,
+          backgroundColor: colors.ink,
+          paddingVertical: 8,
+          paddingHorizontal: 14,
+          borderRadius: 17,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <Icon name="sparkles" size={14} color={colors.yellow} />
+        <Body style={{ fontSize: 13, lineHeight: 16, color: colors.white }}>
+          AI-generated
+        </Body>
+      </View>
     </LinearGradient>
   );
 }
