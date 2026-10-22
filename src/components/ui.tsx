@@ -43,7 +43,14 @@ export type IconName =
   | "google"
   | "apple"
   | "settings"
-  | "refresh-cw";
+  | "refresh-cw"
+  | "chevron-right"
+  | "clock"
+  | "shield"
+  | "help-circle"
+  | "log-out"
+  | "camera"
+  | "flag";
 export function Icon({
   name,
   color = c.ink,

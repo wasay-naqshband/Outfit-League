@@ -21,7 +21,7 @@ export async function cleanupAccounts(db: SupabaseClient) {
       if (ban.error && ban.error.code !== "user_not_found")
         throw new Error("ACCOUNT_CLEANUP_FAILED");
       if (Date.parse(request.requested_at) > Date.now() - 130 * 60000) continue;
-      for (const bucket of ["tryon-private", "library-private"]) {
+      for (const bucket of ["tryon-private", "library-private", "avatars"]) {
         // Storage paths can be nested; query the server's object index, not folder listing.
         const objects = checked(
           await db.rpc("account_storage_paths", {

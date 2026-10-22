@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchConfig, fetchHistory, fetchJob, fetchWallet } from "./tryon-api";
 import { useApp } from "./state";
 import { isTerminal } from "../types/tryon";
+import { supabase } from "./supabase";
 export function useWallet() {
   const { session } = useApp();
   return useQuery({
@@ -46,5 +47,30 @@ export function useJob(id?: string) {
       query.state.data.spin?.status === "processing"
         ? 4000
         : 240000,
+  });
+}
+export function useProfile() {
+  const { session } = useApp();
+  const id = session?.user.id;
+  return useQuery({
+    queryKey: ["profile", id],
+    queryFn: async () => {
+      const { data, error } = await supabase!
+        .from("profiles")
+        .select("display_name")
+        .eq("id", id!)
+        .single();
+      if (error) throw error;
+      // No photo yet is a normal state, not an error.
+      const photo = await supabase!.storage
+        .from("avatars")
+        .createSignedUrl(`${id}/avatar.jpg`, 3600);
+      return {
+        name: data.display_name as string,
+        avatar: photo.data?.signedUrl ?? null,
+      };
+    },
+    enabled: !!id && !!supabase,
+    staleTime: 60000,
   });
 }

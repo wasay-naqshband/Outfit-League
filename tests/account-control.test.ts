@@ -24,6 +24,7 @@ before(async () => {
     "202610200007_account_control",
     "202610200008_live_catalog",
     "202610200009_catalog_approval_privacy",
+    "202610220013_avatars",
   ])
     await db.exec(await readFile(`supabase/migrations/${file}.sql`, "utf8"));
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
@@ -258,5 +259,41 @@ test("live feed requires operator approval; atomic snapshots hide stale, unavail
       [],
       other,
     ),
+  );
+});
+test("profile photos are owner-only and found by account deletion", async () => {
+  await db.exec(
+    "grant insert,update,delete on storage.objects to authenticated",
+  );
+  // Earlier tests start deleting the owner account, so use a fresh person.
+  const me = randomUUID();
+  await db.query("insert into auth.users values($1)", [me]);
+  const mine = me + "/avatar.jpg";
+  await user(
+    "insert into storage.objects(bucket_id,name) values('avatars',$1)",
+    [mine],
+    me,
+  );
+  const insert =
+    "insert into storage.objects(bucket_id,name) values('avatars',$1)";
+  await assert.rejects(user(insert, [other + "/avatar.jpg"], me));
+  await assert.rejects(user(insert, [me + "/other.jpg"], me));
+  assert.equal(
+    (
+      await user(
+        "select name from storage.objects where bucket_id='avatars'",
+        [],
+        other,
+      )
+    ).rows.length,
+    0,
+  );
+  assert.deepEqual(
+    (
+      await db.query("select name from account_storage_paths($1,'avatars')", [
+        me,
+      ])
+    ).rows,
+    [{ name: mine }],
   );
 });

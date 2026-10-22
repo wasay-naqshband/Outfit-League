@@ -84,3 +84,34 @@ export async function preparePhoto(
     bytes,
   };
 }
+
+// Square, small JPEG for a profile photo (the avatars bucket caps at 1 MB).
+export async function pickAvatar(): Promise<string | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 1,
+  });
+  const input = result.canceled ? null : result.assets[0];
+  if (!input) return null;
+  const side = Math.min(input.width, input.height);
+  const output = await ImageManipulator.manipulateAsync(
+    input.uri,
+    [
+      {
+        crop: {
+          originX: (input.width - side) / 2,
+          originY: (input.height - side) / 2,
+          width: side,
+          height: side,
+        },
+      },
+      { resize: { width: 512, height: 512 } },
+    ],
+    { format: ImageManipulator.SaveFormat.JPEG, compress: 0.8, base64: true },
+  );
+  if (!output.base64)
+    throw new Error("We couldn’t prepare that photo. Please try another.");
+  return output.base64;
+}
