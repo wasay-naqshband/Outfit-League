@@ -23,12 +23,7 @@ import {
 } from "../../src/components/CookingLoader";
 import { colors, gradients } from "../../src/theme";
 import { useApp } from "../../src/lib/state";
-import {
-  PART_LABELS,
-  PARTS,
-  useTryOnDraft,
-  type Part,
-} from "../../src/lib/tryon-draft";
+import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import {
   useHistory,
   useSavedPhoto,
@@ -74,7 +69,7 @@ async function agreedOnce(provider: string) {
 type Attempt = {
   key: string;
   person?: string;
-  garments: Partial<Record<Part, string>>;
+  garment?: string;
   started?: boolean;
 };
 export default function TryOn() {
@@ -93,10 +88,9 @@ export default function TryOn() {
   const active = history.data?.find((job) => !isTerminal(job.status));
   const saved = useSavedPhoto();
   const removed = useRef(false);
-  const [slot, setSlot] = useState<Part | null>(null);
+  const [sheet, setSheet] = useState(false);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetError, setSheetError] = useState("");
-  const chosen = PARTS.filter((part) => draft.pieces[part]);
   const shared = useLocalSearchParams<{ shared?: string }>().shared;
   // Shared from another app (Safari, Instagram, a store app): a screenshot or
   // a product link becomes the top.
@@ -126,7 +120,7 @@ export default function TryOn() {
         const photo = file
           ? await preparePhoto(file)
           : await imageFromLink(link!);
-        if (await discardAttempt()) draft.setPiece("top", photo);
+        if (await discardAttempt()) draft.setGarment(photo);
         clearSharedPayloads();
       } catch (e) {
         setError(friendlyError(e));
@@ -167,7 +161,7 @@ export default function TryOn() {
     }
     if (current && !current.started) {
       await Promise.all(
-        [current.person, ...Object.values(current.garments)]
+        [current.person, current.garment]
           .filter(Boolean)
           .map((id) =>
             callTryOn({ action: "remove-upload", id }).catch(() => {}),
@@ -177,8 +171,8 @@ export default function TryOn() {
     attempt.current = null;
     return true;
   }
-  async function photoFor(part: Part) {
-    setSlot(null);
+  async function choosePhoto() {
+    setSheet(false);
     setError("");
     // Let the sheet close before the system photo picker opens over it.
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -186,14 +180,14 @@ export default function TryOn() {
       const photo = await pickPhoto();
       if (!photo) return;
       if (!(await discardAttempt())) return;
-      draft.setPiece(part, photo);
+      draft.setGarment(photo);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "We couldn’t open your photos.",
       );
     }
   }
-  async function linkFor(part: Part, url: string) {
+  async function useLink(url: string) {
     if (!session) {
       setSheetError("Sign in to try on clothes from a store link.");
       return;
@@ -203,62 +197,52 @@ export default function TryOn() {
     try {
       const photo = await imageFromLink(url);
       if (!(await discardAttempt())) return;
-      draft.setPiece(part, photo);
-      setSlot(null);
+      draft.setGarment(photo);
+      setSheet(false);
     } catch (e) {
       setSheetError(friendlyError(e));
     } finally {
       setSheetBusy(false);
     }
   }
-  async function remove(kind: "person" | Part) {
+  async function remove(kind: "person" | "garment") {
     try {
       if (!(await discardAttempt())) return;
       if (kind === "person") {
         removed.current = true;
         draft.setPerson(null);
-      } else draft.setPiece(kind, null);
+      } else draft.setGarment(null);
     } catch {
       setError("Please check your connection before replacing these photos.");
     }
   }
   async function generate() {
-    if (submitted.current || !draft.person || !chosen.length) return;
+    if (submitted.current || !draft.person || !draft.garment) return;
     if (!session) {
       router.push("/auth");
       return;
     }
     if (!config.data?.enabled) return;
-    if (chosen.length > 1 && config.data.provider !== "Genlook") {
-      setError("Full outfits aren’t available right now. Try one piece.");
-      return;
-    }
     if (!(await agreedOnce(config.data.provider ?? "the AI provider"))) return;
     submitted.current = true;
     startedAt.current = Date.now();
     setBusy(true);
     setError("");
-    const current = attempt.current ?? { key: randomUUID(), garments: {} };
+    const current = attempt.current ?? { key: randomUUID() };
     attempt.current = current;
     try {
       setStage("Uploading your private photos…");
       if (!current.person)
         current.person = await uploadPhoto(draft.person, "person");
-      for (const part of chosen)
-        current.garments[part] ??= await uploadPhoto(
-          draft.pieces[part]!,
-          "garment",
-        );
-      const ids = chosen.map((part) => current.garments[part]!);
+      if (!current.garment)
+        current.garment = await uploadPhoto(draft.garment, "garment");
       setStage("Starting your try-on…");
       current.started = true;
       const result = await callTryOn<JobView>({
         action: "start",
         key: current.key,
         person: current.person,
-        garment: ids[0],
-        extra: ids.slice(1),
-        parts: chosen,
+        garment: current.garment,
         consent: "tryon-v1",
       });
       analytics.track(
@@ -334,10 +318,10 @@ export default function TryOn() {
           />
         )}
         <Body>
-          Choose a clear photo of yourself and up to three pieces. Add a photo
-          or paste a link from any store.
+          Choose a clear full-length photo of yourself, then any top, bottoms,
+          jacket or dress. Add a photo or paste a link from any store.
         </Body>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+        <View style={{ flexDirection: "row", gap: 12 }}>
           <PhotoPickerCard
             label="Your photo"
             photo={draft.person}
@@ -349,24 +333,20 @@ export default function TryOn() {
               void remove("person");
             }}
           />
-          {PARTS.map((part) => (
-            <PhotoPickerCard
-              key={part}
-              label={PART_LABELS[part]}
-              hint={part === "top" ? undefined : "Optional"}
-              photo={draft.pieces[part]}
-              disabled={busy || sheetBusy}
-              onChoose={() => {
-                setSheetError("");
-                setSlot(part);
-              }}
-              onRemove={() => {
-                void remove(part);
-              }}
-            />
-          ))}
+          <PhotoPickerCard
+            label="Clothing item"
+            photo={draft.garment}
+            disabled={busy || sheetBusy}
+            onChoose={() => {
+              setSheetError("");
+              setSheet(true);
+            }}
+            onRemove={() => {
+              void remove("garment");
+            }}
+          />
         </View>
-        {sheetBusy && !slot && <Body>Getting the item from your link…</Body>}
+        {sheetBusy && !sheet && <Body>Getting the item from your link…</Body>}
         {!session && (
           <Button
             secondary
@@ -387,19 +367,15 @@ export default function TryOn() {
         )}
         <Button
           icon="sparkles"
-          title={
-            busy
-              ? stage
-              : `Generate try-on · ${Math.max(1, chosen.length)} credit${chosen.length > 1 ? "s" : ""}`
-          }
+          title={busy ? stage : "Generate try-on · 1 credit"}
           disabled={
             busy ||
             !session ||
             !config.data?.enabled ||
             !draft.person ||
-            !chosen.length ||
+            !draft.garment ||
             !!active ||
-            (wallet.data?.available ?? 1) < chosen.length
+            wallet.data?.available === 0
           }
           onPress={() => {
             void generate();
@@ -407,12 +383,12 @@ export default function TryOn() {
         />
       </View>
       <PieceSheet
-        label={slot && PART_LABELS[slot]}
+        visible={sheet}
         busy={sheetBusy}
         error={sheetError}
-        onClose={() => setSlot(null)}
-        onPhoto={() => slot && void photoFor(slot)}
-        onLink={(url) => slot && void linkFor(slot, url)}
+        onClose={() => setSheet(false)}
+        onPhoto={() => void choosePhoto()}
+        onLink={(url) => void useLink(url)}
       />
     </Page>
   );

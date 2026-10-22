@@ -18,7 +18,7 @@ import {
   libraryGarment,
   libraryItem,
 } from "../../src/lib/library";
-import { slotFor, useTryOnDraft } from "../../src/lib/tryon-draft";
+import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import { useApp } from "../../src/lib/state";
 import { colors } from "../../src/theme";
 import { art } from "../../src/data";
@@ -52,7 +52,7 @@ export default function LibraryDetail() {
         await client.invalidateQueries({ queryKey: ["explore-save"] });
         router.replace("/(tabs)/closet");
       } else {
-        draft.setPiece(slotFor(item.category), await libraryGarment(item));
+        draft.setGarment(await libraryGarment(item));
         router.push("/(tabs)/try-on");
       }
     } catch (e) {

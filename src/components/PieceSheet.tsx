@@ -5,16 +5,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Body, Button, Heading } from "./ui";
 import { colors, fonts } from "../theme";
 
-// Bottom sheet for one outfit slot: a photo, or a product link from a store.
+// Bottom sheet for the clothing item: a photo, or a product link from a store.
 export function PieceSheet({
-  label,
+  visible,
   busy,
   error,
   onPhoto,
   onLink,
   onClose,
 }: {
-  label: string | null;
+  visible: boolean;
   busy: boolean;
   error: string;
   onPhoto: () => void;
@@ -23,11 +23,11 @@ export function PieceSheet({
 }) {
   const insets = useSafeAreaInsets();
   const [url, setUrl] = useState("");
-  useEffect(() => setUrl(""), [label]);
+  useEffect(() => setUrl(""), [visible]);
   const link = url.match(/https?:\/\/\S+/i)?.[0];
   return (
     <Modal
-      visible={!!label}
+      visible={visible}
       transparent
       animationType="slide"
       onRequestClose={onClose}
@@ -47,7 +47,7 @@ export function PieceSheet({
           gap: 14,
         }}
       >
-        <Heading size={24}>Add {label?.toLowerCase()}</Heading>
+        <Heading size={24}>Add a clothing item</Heading>
         <Button
           icon="image"
           title="Choose a photo"

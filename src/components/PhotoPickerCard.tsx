@@ -4,17 +4,15 @@ import { Pressable, Text, View } from "react-native";
 import { Icon } from "./ui";
 import { colors, fonts, shadow } from "../theme";
 import type { LocalPhoto } from "../types/tryon";
-// One tile of the 2×2 Try On grid; equal height with or without a photo.
+// A Try On photo tile; same height with or without a photo.
 export function PhotoPickerCard({
   label,
-  hint,
   photo,
   onChoose,
   onRemove,
   disabled,
 }: {
   label: string;
-  hint?: string;
   photo: LocalPhoto | null;
   onChoose: () => void;
   onRemove: () => void;
@@ -68,21 +66,10 @@ export function PhotoPickerCard({
           </>
         ) : (
           <>
-            <Icon name={hint ? "plus" : "image"} size={30} />
+            <Icon name="image" size={30} />
             <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>
               {label}
             </Text>
-            {!!hint && (
-              <Text
-                style={{
-                  fontFamily: fonts.medium,
-                  fontSize: 12,
-                  color: colors.text3,
-                }}
-              >
-                {hint}
-              </Text>
-            )}
           </>
         )}
       </Pressable>

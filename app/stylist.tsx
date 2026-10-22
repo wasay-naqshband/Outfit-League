@@ -25,7 +25,7 @@ import {
   libraryItem,
   type LibraryItem,
 } from "../src/lib/library";
-import { slotFor, useTryOnDraft, type Part } from "../src/lib/tryon-draft";
+import { useTryOnDraft } from "../src/lib/tryon-draft";
 import { friendlyError } from "../src/types/tryon";
 import { colors, fonts } from "../src/theme";
 
@@ -99,17 +99,8 @@ export default function Stylist() {
     });
   const tryOutfit = () =>
     run("try", async () => {
-      const slots = new Map<Part, LibraryItem>();
-      for (const piece of pick?.pieces ?? [])
-        if (
-          WEARABLE.includes(piece.category) &&
-          !slots.has(slotFor(piece.category))
-        )
-          slots.set(slotFor(piece.category), piece);
-      for (const part of ["top", "bottom", "outer"] as Part[])
-        draft.setPiece(part, null);
-      for (const [part, piece] of slots)
-        draft.setPiece(part, await libraryGarment(piece));
+      const piece = pick?.pieces.find((p) => WEARABLE.includes(p.category));
+      if (piece) draft.setGarment(await libraryGarment(piece));
       router.push("/(tabs)/try-on");
     });
   const wearable = pick?.pieces.some((p) => WEARABLE.includes(p.category));
@@ -247,11 +238,7 @@ export default function Stylist() {
                     <Button
                       secondary
                       icon="sparkles"
-                      title={
-                        busy === "try"
-                          ? "Getting it ready…"
-                          : "Try this outfit on"
-                      }
+                      title={busy === "try" ? "Getting it ready…" : "Try it on"}
                       disabled={!!busy}
                       onPress={() => void tryOutfit()}
                     />
