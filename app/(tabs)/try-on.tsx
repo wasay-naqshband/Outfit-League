@@ -1,7 +1,8 @@
 import React, { useRef, useState } from "react";
 import { analytics } from "../../src/lib/analytics";
-import { Modal, Platform, Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Alert, Modal, Platform, View } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { randomUUID } from "expo-crypto";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,10 +10,7 @@ import {
   Body,
   Button,
   CreditPill,
-  DemoNote,
   Heading,
-  Icon,
-  OutfitCard,
   Page,
   SettingsButton,
 } from "../../src/components/ui";
@@ -21,8 +19,7 @@ import {
   CookingLoader,
   TRYON_MESSAGES,
 } from "../../src/components/CookingLoader";
-import { getOutfit } from "../../src/data";
-import { colors, fonts, gradients } from "../../src/theme";
+import { colors, gradients } from "../../src/theme";
 import { useApp } from "../../src/lib/state";
 import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import { useHistory, useTryOnConfig, useWallet } from "../../src/lib/queries";
@@ -31,6 +28,32 @@ import { callTryOn, fetchHistory, uploadPhoto } from "../../src/lib/tryon-api";
 import { friendlyError, isTerminal } from "../../src/types/tryon";
 import type { JobView } from "../../src/types/tryon";
 
+const CONSENT_KEY = "outfit-league-tryon-consent-v1";
+// Photos go to a third-party AI provider, so ask once per device, then remember.
+async function agreedOnce(provider: string) {
+  const prior = await (async () =>
+    Platform.OS === "web"
+      ? localStorage.getItem(CONSENT_KEY)
+      : SecureStore.getItemAsync(CONSENT_KEY))().catch(() => null);
+  if (prior === "yes") return true;
+  const text = `I’m 18+ and have permission to use these photos. They’re sent privately to ${provider} to make the try-on. Nothing is posted publicly.`;
+  const ok = await new Promise<boolean>((resolve) =>
+    Platform.OS === "web"
+      ? resolve(window.confirm(text))
+      : Alert.alert("Before your first try-on", text, [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "I agree", onPress: () => resolve(true) },
+        ]),
+  );
+  if (ok)
+    await (
+      Platform.OS === "web"
+        ? Promise.resolve(localStorage.setItem(CONSENT_KEY, "yes"))
+        : SecureStore.setItemAsync(CONSENT_KEY, "yes")
+    ).catch(() => {});
+  return ok;
+}
+
 type Attempt = {
   key: string;
   person?: string;
@@ -38,15 +61,12 @@ type Attempt = {
   started?: boolean;
 };
 export default function TryOn() {
-  const { look } = useLocalSearchParams<{ look?: string }>();
-  const item = getOutfit(look);
   const { session } = useApp();
   const draft = useTryOnDraft();
   const config = useTryOnConfig();
   const wallet = useWallet();
   const history = useHistory();
   const queryClient = useQueryClient();
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
   const [error, setError] = useState("");
@@ -87,7 +107,6 @@ export default function TryOn() {
       if (!photo) return;
       if (!(await discardAttempt())) return;
       (kind === "person" ? draft.setPerson : draft.setGarment)(photo);
-      setConsent(false);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "We couldn’t open your photos.",
@@ -98,19 +117,18 @@ export default function TryOn() {
     try {
       if (!(await discardAttempt())) return;
       (kind === "person" ? draft.setPerson : draft.setGarment)(null);
-      setConsent(false);
     } catch {
       setError("Please check your connection before replacing these photos.");
     }
   }
   async function generate() {
-    if (submitted.current || !draft.person || !draft.garment || !consent)
-      return;
+    if (submitted.current || !draft.person || !draft.garment) return;
     if (!session) {
       router.push("/auth");
       return;
     }
     if (!config.data?.enabled) return;
+    if (!(await agreedOnce(config.data.provider ?? "the AI provider"))) return;
     submitted.current = true;
     startedAt.current = Date.now();
     setBusy(true);
@@ -141,7 +159,6 @@ export default function TryOn() {
       await queryClient.invalidateQueries({ queryKey: ["tryon-history"] });
       attempt.current = null;
       draft.clear();
-      setConsent(false);
       router.push({
         pathname: "/generation/[id]",
         params: { id: result.job.id, t: String(startedAt.current) },
@@ -191,7 +208,6 @@ export default function TryOn() {
           </View>
         </View>
         <Heading size={34}>Try any outfit on yourself.</Heading>
-        <Body>Your next fit starts with two photos.</Body>
       </LinearGradient>
       <View style={{ padding: 20, gap: 16 }}>
         {active && (
@@ -208,7 +224,6 @@ export default function TryOn() {
         )}
         <Body>
           Choose a clear photo of yourself and one top, shirt, hoodie or jacket.
-          Your selections stay on this device until you generate.
         </Body>
         <View style={{ flexDirection: "row", gap: 12 }}>
           <PhotoPickerCard
@@ -234,80 +249,12 @@ export default function TryOn() {
             }}
           />
         </View>
-        <Button
-          secondary
-          icon="hanger"
-          title="Choose from your Closet"
-          disabled={busy}
-          onPress={() => router.push("/(tabs)/closet")}
-        />
-        {Platform.OS !== "web" && (
-          <Button
-            secondary
-            title="Take your photo"
-            icon="image"
-            disabled={busy}
-            onPress={() => {
-              void select("person", true);
-            }}
-          />
-        )}
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: consent, disabled: busy }}
-          disabled={busy}
-          onPress={() => setConsent(!consent)}
-          style={{
-            flexDirection: "row",
-            gap: 12,
-            alignItems: "flex-start",
-            minHeight: 44,
-            paddingVertical: 8,
-          }}
-        >
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              borderWidth: 2,
-              borderColor: colors.ink,
-              borderRadius: 7,
-              backgroundColor: consent ? colors.ink : colors.white,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {consent && <Icon name="check" size={18} color={colors.yellow} />}
-          </View>
-          <Text
-            style={{
-              flex: 1,
-              fontFamily: fonts.body,
-              fontSize: 14,
-              lineHeight: 20,
-              color: colors.text2,
-            }}
-          >
-            I’m 18+ and have permission to use these photos. Generating uploads
-            them privately and sends them to{" "}
-            {config.data?.provider ?? "the AI provider"} for processing. Nothing
-            is posted publicly.
-            {config.data?.provider === "Genlook" &&
-              " Genlook receives both photos and creates a hosted result. We request one-day retention; deleting here removes Outfit League’s copies."}
-          </Text>
-        </Pressable>
         {!session && (
           <Button
             secondary
             title="Sign in for a real try-on"
             onPress={() => router.push("/auth")}
           />
-        )}
-        {session && !config.isPending && !config.data?.enabled && (
-          <Body>
-            Live generation isn’t connected yet. Your selected photos stay
-            local; the sample result below is still available.
-          </Body>
         )}
         {!!error && (
           <Body
@@ -329,7 +276,6 @@ export default function TryOn() {
             !config.data?.enabled ||
             !draft.person ||
             !draft.garment ||
-            !consent ||
             !!active ||
             wallet.data?.available === 0
           }
@@ -337,46 +283,6 @@ export default function TryOn() {
             void generate();
           }}
         />
-        <Body style={{ fontSize: 13 }}>
-          One credit is used only for a successful preview. This visualizes
-          style, not physical fit or sizing. You can delete your photos and
-          results from Recent try-ons.
-        </Body>
-        {session && (
-          <Button
-            secondary
-            title="Recent try-ons"
-            onPress={() => router.push("/history")}
-          />
-        )}
-        <Heading size={22}>
-          {look ? "Your selected inspiration" : "Explore a sample result"}
-        </Heading>
-        {look && (
-          <Body style={{ fontSize: 13 }}>
-            This inspiration is a sample illustration. For a real try-on, choose
-            a photo of a single supported garment above.
-          </Body>
-        )}
-        <OutfitCard
-          outfit={item}
-          height={215}
-          label
-          onTry={() =>
-            router.push({ pathname: "/result", params: { look: item.id } })
-          }
-          onPress={() =>
-            router.push({ pathname: "/result", params: { look: item.id } })
-          }
-        />
-        <Button
-          secondary
-          title="View demo result"
-          onPress={() =>
-            router.push({ pathname: "/result", params: { look: item.id } })
-          }
-        />
-        <DemoNote text="The demo uses supplied artwork, never your selected photo." />
       </View>
     </Page>
   );
