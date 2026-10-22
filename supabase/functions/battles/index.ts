@@ -156,6 +156,16 @@ async function view(
       ? Promise.all([player(row.owner_id), player(row.b_owner_id)])
       : null,
   ]);
+  const comments = ["published", "closed"].includes(row.status)
+    ? (checked(
+        await db
+          .from("battle_comments")
+          .select("id,author_key,display_name,body,created_at")
+          .eq("battle_id", id)
+          .order("id", { ascending: false })
+          .limit(50),
+      ) ?? [])
+    : [];
   let voters: unknown[] = [];
   if (
     row.voting_mode === "public" &&
@@ -189,6 +199,13 @@ async function view(
     players: players && { a: players[0], b: players[1] },
     counts,
     mine: checked(mine)?.choice ?? null,
+    comments: comments.reverse().map((c) => ({
+      id: c.id,
+      name: c.display_name,
+      body: c.body,
+      at: c.created_at,
+      mine: c.author_key === key,
+    })),
     voters,
   };
 }
@@ -365,6 +382,34 @@ Deno.serve(async (req) => {
         p_choice: body.choice,
         p_name: typeof body.name === "string" ? body.name.slice(0, 40) : null,
         p_authenticated: !!owner && body.publicConsent === true,
+      });
+      return reply(await view(id, owner, key, 0));
+    }
+    if (body.action === "comment") {
+      if (
+        typeof body.name !== "string" ||
+        typeof body.body !== "string" ||
+        body.name.trim().length < 2 ||
+        body.name.length > 40 ||
+        !body.body.trim() ||
+        body.body.length > 280
+      )
+        throw new Error("INVALID_REQUEST");
+      await rpc("add_battle_comment", {
+        p_id: id,
+        p_key: key,
+        p_name: body.name,
+        p_body: body.body,
+      });
+      return reply(await view(id, owner, key, 0));
+    }
+    if (body.action === "uncomment") {
+      if (!Number.isSafeInteger(body.commentId))
+        throw new Error("INVALID_REQUEST");
+      await rpc("delete_battle_comment", {
+        p_owner: owner,
+        p_key: key,
+        p_comment: body.commentId,
       });
       return reply(await view(id, owner, key, 0));
     }

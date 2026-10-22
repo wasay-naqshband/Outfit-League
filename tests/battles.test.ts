@@ -29,6 +29,12 @@ before(async () => {
   await db.exec(
     await readFile("supabase/migrations/202610220015_battle_modes.sql", "utf8"),
   );
+  await db.exec(
+    await readFile(
+      "supabase/migrations/202610220016_battle_comments.sql",
+      "utf8",
+    ),
+  );
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
   await db.query("insert into public.profiles values($1,null),($2,null)", [
     owner,
@@ -324,5 +330,45 @@ test("versus battles wait for one friend to join with their own look, then go li
   );
   await assert.rejects(
     service("select public.cast_battle_vote($1,'v1','A',null,false)", [id]),
+  );
+});
+
+test("comments need a live battle; only the author or battle owner can delete", async () => {
+  const [j1, j2] = await jobs(owner, 2);
+  const id = await createN("choose", [j1!, j2!]);
+  const add = (key: string) =>
+    service("select public.add_battle_comment($1,$2,'Sam','Go with A!')", [
+      id,
+      key,
+    ]);
+  await assert.rejects(add("k1"));
+  await service(
+    "update public.battles set ready=true,a_path=id||'/a.jpg',b_path=id||'/b.jpg' where id=$1",
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+  await add("k1");
+  await add("k2");
+  const ids = (
+    await service(
+      "select id from public.battle_comments where battle_id=$1 order by id",
+      [id],
+    )
+  ).rows.map((r) => r.id);
+  const del = (who: string | null, key: string, c: unknown) =>
+    service("select public.delete_battle_comment($1,$2,$3)", [who, key, c]);
+  await assert.rejects(del(other, "k3", ids[0]));
+  await del(null, "k1", ids[0]);
+  await del(owner, "nobody", ids[1]);
+  assert.equal(
+    (
+      await service("select * from public.battle_comments where battle_id=$1", [
+        id,
+      ])
+    ).rows.length,
+    0,
+  );
+  await assert.rejects(
+    service("select public.add_battle_comment($1,'k1','Sam','   ')", [id]),
   );
 });

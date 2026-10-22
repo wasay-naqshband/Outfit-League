@@ -50,7 +50,10 @@ export type IconName =
   | "help-circle"
   | "log-out"
   | "camera"
-  | "flag";
+  | "flag"
+  | "whatsapp"
+  | "copy"
+  | "send";
 export function Icon({
   name,
   color = c.ink,
@@ -60,7 +63,7 @@ export function Icon({
   color?: string;
   size?: number;
 }) {
-  if (name === "google" || name === "apple")
+  if (name === "google" || name === "apple" || name === "whatsapp")
     return <FontAwesome name={name} size={size} color={color} />;
   if (name === "hanger" || name === "sparkles")
     return (

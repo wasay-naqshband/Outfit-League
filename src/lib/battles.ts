@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { Platform, Share } from "react-native";
+import { Linking, Platform, Share } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import * as Clipboard from "expo-clipboard";
 import { randomUUID } from "expo-crypto";
@@ -26,6 +26,13 @@ export type BattleView = {
   counts: Record<Side, number>;
   mine: Side | null;
   voters: { id: number; choice: Side; display_name: string }[];
+  comments: {
+    id: number;
+    name: string;
+    body: string;
+    at: string;
+    mine: boolean;
+  }[];
 };
 export type BattleRow = {
   id: string;
@@ -180,11 +187,7 @@ export async function shareBattleLink(
       });
     else await copyBattleLink(id);
   } else
-    await Share.share({
-      title: "Outfit League",
-      message: `${text} ${url}`,
-      url,
-    });
+    await Share.share({ title: "Outfit League", message: `${text} ${url}` });
 }
 export async function rememberBattleReturn(id: string) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return;
@@ -240,4 +243,12 @@ export async function myLooks(): Promise<{ id: string; url: string }[]> {
     const url = signed.data[i]?.signedUrl;
     return url ? [{ id: row.id, url }] : [];
   });
+}
+
+export async function whatsappBattleLink(id: string, text: string) {
+  const url = publicBattleUrl(id);
+  if (!url) throw new Error("A public app address is needed first.");
+  await Linking.openURL(
+    "https://wa.me/?text=" + encodeURIComponent(`${text} ${url}`),
+  );
 }

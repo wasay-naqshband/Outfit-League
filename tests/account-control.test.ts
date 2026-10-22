@@ -27,6 +27,7 @@ before(async () => {
     "202610220013_avatars",
     "202610220014_saved_person_photo",
     "202610220015_battle_modes",
+    "202610220016_battle_comments",
   ])
     await db.exec(await readFile(`supabase/migrations/${file}.sql`, "utf8"));
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
