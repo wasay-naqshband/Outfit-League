@@ -63,12 +63,9 @@ export const startSpin = (id: string) =>
   callTryOn<JobView>({ action: "spin", id });
 export async function fetchWallet(): Promise<Wallet> {
   if (!supabase) throw new Error("UNAUTHORIZED");
-  const { data, error } = await supabase
-    .from("credit_wallets")
-    .select("available,reserved")
-    .single();
+  const { data, error } = await supabase.rpc("read_my_wallet");
   if (error) throw error;
-  return data;
+  return data as Wallet;
 }
 export async function fetchHistory(): Promise<TryOnJob[]> {
   if (!supabase) return [];

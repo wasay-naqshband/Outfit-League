@@ -12,6 +12,8 @@ export function PieceSheet({
   error,
   onPhoto,
   onLink,
+  proEnabled,
+  onPro,
   onClose,
 }: {
   visible: boolean;
@@ -19,6 +21,8 @@ export function PieceSheet({
   error: string;
   onPhoto: () => void;
   onLink: (url: string) => void;
+  proEnabled: boolean;
+  onPro: () => void;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -54,52 +58,79 @@ export function PieceSheet({
           disabled={busy}
           onPress={onPhoto}
         />
-        <Body style={{ textAlign: "center", fontSize: 13 }}>
-          or paste a link from any store
-        </Body>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            backgroundColor: colors.white,
-            borderRadius: 18,
-            paddingLeft: 16,
-          }}
-        >
-          <TextInput
-            accessibilityLabel="Store link"
-            value={url}
-            onChangeText={setUrl}
-            editable={!busy}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="Paste a product page link"
-            placeholderTextColor={colors.placeholder}
+        {proEnabled ? (
+          <Body style={{ textAlign: "center", fontSize: 13 }}>
+            or paste a link from any store
+          </Body>
+        ) : (
+          <View
             style={{
-              flex: 1,
-              paddingVertical: 15,
-              fontFamily: fonts.body,
-              fontSize: 15,
-              color: colors.ink,
+              backgroundColor: colors.white,
+              borderRadius: 18,
+              padding: 14,
+              gap: 8,
             }}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => void Clipboard.getStringAsync().then(setUrl)}
-            style={{ paddingHorizontal: 16, paddingVertical: 15 }}
           >
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>Paste</Text>
-          </Pressable>
-        </View>
-        <Button
-          secondary
-          icon="sparkles"
-          title={busy ? "Finding the item…" : "Use this link"}
-          disabled={busy || !link}
-          onPress={() => link && onLink(link)}
-        />
+            <Body style={{ textAlign: "center", fontSize: 13 }}>
+              Import a product link with Pro
+            </Body>
+            <Button
+              secondary
+              title="Explore Pro"
+              disabled={busy}
+              onPress={onPro}
+            />
+          </View>
+        )}
+        {proEnabled && (
+          <>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: colors.white,
+                borderRadius: 18,
+                paddingLeft: 16,
+              }}
+            >
+              <TextInput
+                accessibilityLabel="Store link"
+                value={url}
+                onChangeText={setUrl}
+                editable={!busy}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="Paste a product page link"
+                placeholderTextColor={colors.placeholder}
+                style={{
+                  flex: 1,
+                  paddingVertical: 15,
+                  fontFamily: fonts.body,
+                  fontSize: 15,
+                  color: colors.ink,
+                }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void Clipboard.getStringAsync().then(setUrl)}
+                style={{ paddingHorizontal: 16, paddingVertical: 15 }}
+              >
+                <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>
+                  Paste
+                </Text>
+              </Pressable>
+            </View>
+            <Button
+              secondary
+              icon="sparkles"
+              title={busy ? "Finding the item…" : "Use this link"}
+              disabled={busy || !link}
+              onPress={() => link && onLink(link)}
+            />
+          </>
+        )}
         {!!error && <Body style={{ fontSize: 14 }}>{error}</Body>}
       </View>
     </Modal>

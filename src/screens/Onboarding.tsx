@@ -727,15 +727,12 @@ export default function Onboarding() {
           }}
         >
           <Button
-            title="See my plan"
+            title="Start with 3 free try-ons"
             disabled={percent < 100}
             style={{ minHeight: 60, borderRadius: 22 }}
             onPress={() => {
               update({ done: true });
-              router.replace({
-                pathname: "/paywall",
-                params: { source: "onboarding" },
-              });
+              router.replace("/(tabs)");
             }}
           />
         </View>

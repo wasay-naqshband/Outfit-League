@@ -27,5 +27,8 @@ verify_jwt = false
 [functions.account]
 verify_jwt = false
 
+[functions.revenuecat-webhook]
+verify_jwt = false
+
 # Authentication is explicitly verified with auth.getUser inside the function.
 # This supports modern Supabase publishable keys as well as legacy JWT anon keys.

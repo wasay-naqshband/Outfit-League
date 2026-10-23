@@ -1,5 +1,5 @@
 import React from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import {
   Body,
@@ -38,11 +38,15 @@ export default function Credits() {
           <>
             <Heading size={34}>{wallet.data.available} available</Heading>
             <Body>
-              {wallet.data.reserved
-                ? wallet.data.reserved +
-                  " credit reserved for your current generation."
-                : "No generation is using a reserved credit."}
+              {wallet.data.subscription_active
+                ? `${wallet.data.subscription_tryons} Pro try-ons and ${wallet.data.subscription_spins} included 360° views left this month. Unused monthly allowances expire.`
+                : "Free and purchased credits stay available until you use them."}
             </Body>
+            {!!wallet.data.reserved && (
+              <Body>
+                {wallet.data.reserved} credit(s) reserved for work in progress.
+              </Body>
+            )}
           </>
         ) : (
           <Body>Loading your balance…</Body>
@@ -52,11 +56,28 @@ export default function Credits() {
           generations return the reserved credit. The server controls your
           balance.
         </Body>
-        <Button title="Purchases not available" disabled />
+        <Button
+          title={
+            wallet.data?.subscription_active
+              ? "Manage your Pro options"
+              : "See plans and try-on packs"
+          }
+          onPress={() => router.push("/paywall")}
+        />
         <Body>
-          Credit packs are being prepared. There are no active offers or
-          charges. Your existing credits remain available.
+          {wallet.data?.subscription_active
+            ? "Manage or cancel subscriptions in your Apple Account settings."
+            : "App Store offers appear when they’re available on your iPhone. Closing this page keeps browsing free."}
         </Body>
+        {wallet.data?.subscription_active && (
+          <Button
+            secondary
+            title="Open Apple subscriptions"
+            onPress={() =>
+              void Linking.openURL("https://apps.apple.com/account/subscriptions")
+            }
+          />
+        )}
         {session && (
           <Button
             secondary

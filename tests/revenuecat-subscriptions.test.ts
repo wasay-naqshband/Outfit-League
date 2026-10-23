@@ -1,0 +1,125 @@
+import { after, before, test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { PGlite } from "@electric-sql/pglite";
+
+const db = new PGlite();
+const owner = randomUUID();
+before(async () => {
+  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+    create schema auth; create schema storage; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    grant usage on schema auth to public;
+    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+    create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,created_at timestamptz default now());
+    alter table storage.objects enable row level security; grant usage on schema storage to authenticated; grant select on storage.objects to authenticated;
+    create function public.guard_active_owner() returns trigger language plpgsql as $$begin return new; end$$;`);
+  for (const file of [
+    "202610190001_tryon.sql",
+    "202610210011_spin_views.sql",
+    "202610220017_outfits_stylist.sql",
+    "202610230018_revenuecat_credits.sql",
+    "202610230019_revenuecat_pack_15.sql",
+    "202610230020_revenuecat_pro.sql",
+  ]) {
+    await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
+  }
+  await db.query("insert into auth.users(id) values($1)", [owner]);
+  await db.query("select initialize_account($1)", [owner]);
+});
+after(() => db.close());
+
+async function asset(kind: "person" | "garment" | "result" | "spin") {
+  const id = randomUUID();
+  await db.query(
+    "insert into private_assets(id,owner_id,kind,path,byte_size,content_type) values($1,$2,$3,$4,1024,'image/jpeg')",
+    [id, owner, kind, `${owner}/${id}.jpg`],
+  );
+  return id;
+}
+const wallet = async () =>
+  (
+    await db.query<{
+      available: number;
+      reserved: number;
+      subscription_tryons: number;
+      subscription_spins: number;
+    }>(
+      "select available,reserved,subscription_tryons,subscription_spins from credit_wallets where owner_id=$1",
+      [owner],
+    )
+  ).rows[0];
+const subscriptionEvent = (id: string, type: string, expiresAt: string) =>
+  db.query(
+    "select apply_revenuecat_subscription_event($1,$2,$3,'outfit_pro_monthly',$4::timestamptz,'TRIAL')",
+    [owner, id, type, expiresAt],
+  );
+
+test("Pro grants monthly allowances separately and an included spin does not spend permanent credits", async () => {
+  await subscriptionEvent(
+    "trial-start",
+    "INITIAL_PURCHASE",
+    new Date(Date.now() + 3 * 86400000).toISOString(),
+  );
+  assert.deepEqual(await wallet(), {
+    available: 53,
+    reserved: 0,
+    subscription_tryons: 50,
+    subscription_spins: 2,
+  });
+
+  const person = await asset("person");
+  const garment = await asset("garment");
+  const result = await asset("result");
+  const job = (
+    await db.query<{ r: { job: { id: string } } }>(
+      "select reserve_tryon($1,$2,$3,$4,'tryon-v1') r",
+      [owner, randomUUID(), person, garment],
+    )
+  ).rows[0].r.job;
+  assert.deepEqual(await wallet(), {
+    available: 52,
+    reserved: 1,
+    subscription_tryons: 49,
+    subscription_spins: 2,
+  });
+  await db.query("select finish_tryon($1,$2,null)", [job.id, result]);
+  const spin = (
+    await db.query<{ r: { spin: { id: string } } }>(
+      "select reserve_spin($1,$2) r",
+      [owner, job.id],
+    )
+  ).rows[0].r.spin;
+  assert.equal(
+    (
+      await db.query<{ credit_source: string }>(
+        "select credit_source from spin_views where id=$1",
+        [spin.id],
+      )
+    ).rows[0].credit_source,
+    "subscription",
+  );
+  assert.deepEqual(await wallet(), {
+    available: 52,
+    reserved: 1,
+    subscription_tryons: 49,
+    subscription_spins: 1,
+  });
+});
+
+test("expiration removes only unused subscription credits and purchased pack credits stay permanent", async () => {
+  await db.query(
+    "select grant_revenuecat_tryons($1,'pack-15','outfit_tryons_15')",
+    [owner],
+  );
+  await subscriptionEvent(
+    "trial-expired",
+    "EXPIRATION",
+    new Date(Date.now() - 1000).toISOString(),
+  );
+  const current = await wallet();
+  assert.equal(current.subscription_tryons, 0);
+  assert.equal(current.subscription_spins, 0);
+  assert.equal(current.available, 18); // Three free + fifteen purchased.
+});

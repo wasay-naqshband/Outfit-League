@@ -1,4 +1,5 @@
-export type CreditKind = "grant" | "reserve" | "consume" | "refund";
+export type CreditKind =
+  "grant" | "reserve" | "consume" | "refund" | "purchase";
 export function creditActivity(kind: CreditKind) {
   switch (kind) {
     case "grant":
@@ -26,6 +27,12 @@ export function creditActivity(kind: CreditKind) {
         detail:
           "The generation did not complete. Your reserved credit is available again.",
         badge: "+1",
+      };
+    case "purchase":
+      return {
+        title: "15 try-ons purchased",
+        detail: "15 try-ons were added to your balance.",
+        badge: "+15",
       };
   }
 }

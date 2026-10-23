@@ -33,6 +33,7 @@ import {
 import { pickPhoto, preparePhoto } from "../../src/lib/photos";
 import {
   callTryOn,
+  fetchWallet,
   fetchHistory,
   imageFromLink,
   uploadPhoto,
@@ -86,6 +87,7 @@ export default function TryOn() {
   const submitted = useRef(false);
   const startedAt = useRef(0);
   const active = history.data?.find((job) => !isTerminal(job.status));
+  const outOfCredits = wallet.data?.available === 0;
   const saved = useSavedPhoto();
   const removed = useRef(false);
   const [sheet, setSheet] = useState(false);
@@ -117,6 +119,19 @@ export default function TryOn() {
     setSheetBusy(true);
     void (async () => {
       try {
+        if (link && !file) {
+          const currentWallet = await fetchWallet();
+          if (!currentWallet.subscription_active) {
+            setError(
+              "Importing store links is a Pro feature. Free photo imports still work.",
+            );
+            router.push({
+              pathname: "/paywall",
+              params: { source: "feature" },
+            });
+            return;
+          }
+        }
         const photo = file
           ? await preparePhoto(file)
           : await imageFromLink(link!);
@@ -192,6 +207,17 @@ export default function TryOn() {
       setSheetError("Sign in to try on clothes from a store link.");
       return;
     }
+    try {
+      const currentWallet = await fetchWallet();
+      if (!currentWallet.subscription_active) {
+        setSheet(false);
+        router.push({ pathname: "/paywall", params: { source: "feature" } });
+        return;
+      }
+    } catch {
+      setSheetError("We couldn’t verify your plan. Please try again.");
+      return;
+    }
     setSheetBusy(true);
     setSheetError("");
     try {
@@ -217,11 +243,16 @@ export default function TryOn() {
     }
   }
   async function generate() {
-    if (submitted.current || !draft.person || !draft.garment) return;
+    if (submitted.current) return;
     if (!session) {
       router.push("/auth");
       return;
     }
+    if (outOfCredits) {
+      router.push({ pathname: "/paywall", params: { source: "credits" } });
+      return;
+    }
+    if (!draft.person || !draft.garment) return;
     if (!config.data?.enabled) return;
     if (!(await agreedOnce(config.data.provider ?? "the AI provider"))) return;
     submitted.current = true;
@@ -367,15 +398,19 @@ export default function TryOn() {
         )}
         <Button
           icon="sparkles"
-          title={busy ? stage : "Generate try-on · 1 credit"}
+          title={
+            busy
+              ? stage
+              : wallet.data?.available === 0
+                ? "Get more try-ons"
+                : "Generate try-on · 1 credit"
+          }
           disabled={
             busy ||
             !session ||
-            !config.data?.enabled ||
-            !draft.person ||
-            !draft.garment ||
             !!active ||
-            wallet.data?.available === 0
+            (!outOfCredits &&
+              (!config.data?.enabled || !draft.person || !draft.garment))
           }
           onPress={() => {
             void generate();
@@ -388,6 +423,11 @@ export default function TryOn() {
         error={sheetError}
         onClose={() => setSheet(false)}
         onPhoto={() => void choosePhoto()}
+        proEnabled={wallet.data?.subscription_active ?? false}
+        onPro={() => {
+          setSheet(false);
+          router.push({ pathname: "/paywall", params: { source: "feature" } });
+        }}
         onLink={(url) => void useLink(url)}
       />
     </Page>

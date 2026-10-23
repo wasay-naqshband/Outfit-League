@@ -20,7 +20,7 @@ import { FloatingTabBar } from "../components/FloatingTabBar";
 import { SpinViewer } from "../components/SpinViewer";
 import { CookingLoader, SPIN_MESSAGES } from "../components/CookingLoader";
 import { useApp } from "../lib/state";
-import { useJob } from "../lib/queries";
+import { useJob, useWallet } from "../lib/queries";
 import { rateLook, saveLook, startSpin } from "../lib/tryon-api";
 import { RatingCard } from "../components/Stylist";
 import { sharePreview } from "../lib/share-image";
@@ -30,6 +30,7 @@ import { colors, gradients, shadow } from "../theme";
 export default function LiveResult({ id }: { id: string }) {
   const { session } = useApp();
   const query = useJob(id);
+  const wallet = useWallet();
   const client = useQueryClient();
   const [segment, setSegment] = useState("After");
   const [error, setError] = useState("");
@@ -63,6 +64,15 @@ export default function LiveResult({ id }: { id: string }) {
   }
   async function makeSpin() {
     if (busy) return;
+    const included = wallet.data?.subscription_spins ?? 0;
+    const permanentCredits = Math.max(
+      0,
+      (wallet.data?.available ?? 0) - (wallet.data?.subscription_tryons ?? 0),
+    );
+    if (included < 1 && permanentCredits < 1) {
+      router.push({ pathname: "/paywall", params: { source: "credits" } });
+      return;
+    }
     spinStart.current = Date.now();
     setBusy(true);
     setError("");
@@ -167,7 +177,13 @@ export default function LiveResult({ id }: { id: string }) {
               ) : (
                 spin?.status !== "processing" && (
                   <Button
-                    title={busy ? "Please wait…" : "Make 360° view · 1 credit"}
+                    title={
+                      busy
+                        ? "Please wait…"
+                        : (wallet.data?.subscription_spins ?? 0) > 0
+                          ? `Make 360° view · ${wallet.data?.subscription_spins} included`
+                          : "Make 360° view · 1 credit"
+                    }
                     icon="sparkles"
                     onPress={() => {
                       void makeSpin();

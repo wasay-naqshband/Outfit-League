@@ -374,6 +374,7 @@ const exposed = new Set([
   "PROVIDER_BUSY",
   "LINK_FAILED",
   "LINK_NO_IMAGE",
+  "PRO_REQUIRED",
   "STYLIST_FAILED",
   "NO_SAVED_PHOTO",
 ]);
@@ -575,6 +576,18 @@ Deno.serve(async (req) => {
       return reply(await resultView(job));
     }
     if (body.action === "link") {
+      const subscription = checked(
+        await db
+          .from("user_subscriptions")
+          .select("active,expires_at")
+          .eq("owner_id", owner)
+          .maybeSingle(),
+      ) as { active: boolean; expires_at: string } | null;
+      if (
+        !subscription?.active ||
+        Date.parse(subscription.expires_at) <= Date.now()
+      )
+        throw new Error("PRO_REQUIRED");
       await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
       const photo = await linkImage(body.url).catch((error) => {
         throw new Error(

@@ -24,7 +24,16 @@ export type JobView = {
     start: number;
   } | null;
 };
-export type Wallet = { available: number; reserved: number };
+export type Wallet = {
+  available: number;
+  reserved: number;
+  subscription_tryons: number;
+  subscription_spins: number;
+  subscription_active: boolean;
+  subscription_product: string | null;
+  subscription_expires_at: string | null;
+  allowance_expires_at: string | null;
+};
 export type LocalPhoto = {
   uri: string;
   base64: string;
@@ -47,6 +56,8 @@ export const errorMessages: Record<string, string> = {
     "You don’t have enough credits for this try-on. Each outfit piece uses one credit.",
   LINK_FAILED:
     "We couldn’t open that link. Check it’s a product page, or screenshot the item and choose the photo instead.",
+  PRO_REQUIRED:
+    "Importing store links is included with Pro. Your photo imports still work on Free.",
   LINK_NO_IMAGE:
     "We couldn’t find a clothing photo on that page. Screenshot the item and choose the photo instead.",
   STYLIST_FAILED: "The stylist couldn’t answer just now. Please try again.",

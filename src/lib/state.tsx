@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { focusManager, useQueryClient } from "@tanstack/react-query";
 import { analytics } from "./analytics";
+import { identifyPurchasesUser } from "./revenuecat";
 
 type State = {
   session: Session | null;
@@ -20,6 +21,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(!supabase);
   const [saved, setSaved] = useState<string[]>([]);
   const [vote, setVote] = useState<"A" | "B" | null>(null);
+  useEffect(() => {
+    void identifyPurchasesUser(session?.user.id ?? null).catch(() => {});
+  }, [session?.user.id]);
   useEffect(() => {
     analytics.reset();
     setSaved([]);

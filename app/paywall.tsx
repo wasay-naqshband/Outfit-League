@@ -1,74 +1,158 @@
-import React, { useState } from "react";
-import {
-  Alert,
-  Linking,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  Body,
-  Button,
-  Heading,
-  Icon,
-  RoundButton,
-  StickerBadge,
-} from "../src/components/ui";
+import { Body, Button, Heading, Icon, RoundButton } from "../src/components/ui";
 import { colors, fonts, gradients, shadow } from "../src/theme";
+import { useWallet } from "../src/lib/queries";
+import { useApp } from "../src/lib/state";
+import {
+  buyPackage,
+  getPurchaseOptions,
+  identifyPurchasesUser,
+  purchasesAvailable,
+  restorePurchases,
+  TRYON_PACK_CREDITS,
+  type PurchaseOptions,
+} from "../src/lib/revenuecat";
 
-type Plan = {
-  id: "pro_monthly" | "tryon_pack";
-  price: string; // store-localised, never hard-coded
-  trialDays?: number;
-  credits?: number;
+type Plan = "yearly" | "monthly" | "pack";
+const emptyOffers: PurchaseOptions = {
+  yearly: null,
+  monthly: null,
+  pack: null,
 };
-// ponytail: no store is connected yet, so there is nothing to sell. Wire
-// RevenueCat/StoreKit products here; everything below renders from them.
-const storePlans: Plan[] = [];
-// Development-only preview of the layout with placeholder products.
-const samplePlans: Plan[] = [
-  { id: "pro_monthly", price: "PKR [price]", trialDays: 3 },
-  { id: "tryon_pack", price: "PKR [price]", credits: 10 },
-];
-const BENEFITS = [
-  "A fresh bundle of AI try-ons every month",
-  "Try on anything from any store link",
-  "360° views of your favourite looks",
-];
 
 export default function Paywall() {
   const insets = useSafeAreaInsets();
-  const { preview } = useLocalSearchParams<{
-    source?: string;
-    preview?: string;
-  }>();
-  const plans = __DEV__ && preview ? samplePlans : storePlans;
-  const [selected, setSelected] = useState<Plan["id"]>("pro_monthly");
-  const pro = plans.find((p) => p.id === "pro_monthly");
-  const pack = plans.find((p) => p.id === "tryon_pack");
-  const plan = plans.find((p) => p.id === selected);
-  const trial = selected === "pro_monthly" ? pro?.trialDays : undefined;
+  const { session } = useApp();
+  const wallet = useWallet();
+  const { source } = useLocalSearchParams<{ source?: string }>();
+  const exhausted = source === "credits";
   const close = () => router.replace("/(tabs)");
-  const unavailable = () =>
-    Alert.alert(
-      "Not available yet",
-      "Purchases aren’t connected yet. Your free try-ons still work.",
-    );
+  const [offers, setOffers] = useState<PurchaseOptions>(emptyOffers);
+  const [selected, setSelected] = useState<Plan>("yearly");
+  const [loading, setLoading] = useState(false);
+  const [purchaseMessage, setPurchaseMessage] = useState("");
+
+  useEffect(() => {
+    if (!purchasesAvailable() || !session) return;
+    void identifyPurchasesUser(session.user.id)
+      .then(getPurchaseOptions)
+      .then((next) => {
+        setOffers(next);
+        if (!next.yearly && next.monthly) setSelected("monthly");
+        else if (!next.yearly && !next.monthly && next.pack)
+          setSelected("pack");
+      })
+      .catch(() =>
+        setPurchaseMessage("App Store offers couldn’t load. Please try again."),
+      );
+  }, [session?.user.id]);
+
+  const packageFor = (plan: Plan) => offers[plan];
+  const selectedPackage = offers[selected];
+  const price = (plan: Plan, fallback: string) =>
+    packageFor(plan)?.product.priceString ?? fallback;
+
+  async function refreshUntilConfirmed(plan: Plan, previousBalance: number) {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const result = await wallet.refetch();
+      const current = result.data;
+      if (
+        current &&
+        (plan === "pack"
+          ? current.available >= previousBalance + TRYON_PACK_CREDITS
+          : current.subscription_active && current.subscription_tryons >= 1)
+      )
+        return true;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+    return false;
+  }
+
+  async function purchase() {
+    if (!selectedPackage || loading) return;
+    const previousBalance = wallet.data?.available ?? 0;
+    setLoading(true);
+    setPurchaseMessage("");
+    try {
+      await buyPackage(selectedPackage);
+      const confirmed = await refreshUntilConfirmed(selected, previousBalance);
+      if (confirmed) {
+        setPurchaseMessage("Your Outfit League plan is ready.");
+        await wallet.refetch();
+      } else {
+        setPurchaseMessage(
+          "Apple confirmed your purchase. Your benefits are syncing; check again shortly.",
+        );
+      }
+    } catch {
+      setPurchaseMessage(
+        "We couldn’t confirm the purchase. Check your App Store account before trying again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function restore() {
+    if (loading || !purchasesAvailable()) return;
+    setLoading(true);
+    setPurchaseMessage("");
+    try {
+      await restorePurchases();
+      await wallet.refetch();
+      setPurchaseMessage(
+        "Purchases restored. Your server balance has been refreshed.",
+      );
+    } catch {
+      setPurchaseMessage("We couldn’t restore purchases. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const plans: {
+    id: Plan;
+    title: string;
+    description: string;
+    fallback: string;
+    featured?: boolean;
+  }[] = [
+    {
+      id: "yearly",
+      title: "Pro yearly",
+      description:
+        "50 try-ons + 2 360° views each month · $4.17/month · save 58%",
+      fallback: "$49.99",
+      featured: true,
+    },
+    {
+      id: "monthly",
+      title: "Pro monthly",
+      description: "50 try-ons + 2 360° views each month · 3-day free trial",
+      fallback: "$9.99",
+    },
+    {
+      id: "pack",
+      title: "Try-on pack",
+      description: "15 try-ons · one-time purchase · credits never expire",
+      fallback: "$4.99",
+    },
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.cream }}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 36 }}
         showsVerticalScrollIndicator={false}
       >
         <LinearGradient
           colors={gradients.yellow}
           style={{
-            paddingTop: insets.top + 20,
+            paddingTop: insets.top + 16,
             paddingHorizontal: 20,
             paddingBottom: 26,
             borderBottomLeftRadius: 32,
@@ -76,182 +160,209 @@ export default function Paywall() {
             gap: 18,
           }}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              onPress={unavailable}
-              style={{ minHeight: 44, justifyContent: "center" }}
-            >
-              <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>
-                Restore
-              </Text>
-            </Pressable>
-            <RoundButton name="x" label="Close" onPress={close} />
+          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+            <RoundButton
+              name="x"
+              label="Close and keep browsing"
+              onPress={close}
+            />
           </View>
           <View style={{ gap: 8 }}>
             <Heading size={32} style={{ letterSpacing: -1.1 }}>
-              Stop guessing. See it on you first.
+              {exhausted
+                ? "Your free try-ons are all used."
+                : "See it on you before you buy."}
             </Heading>
             <Body style={{ fontFamily: fonts.medium, color: "#3B3647" }}>
-              Your fitting room is ready.
+              Keep exploring with Free, or choose the plan that fits your style.
             </Body>
           </View>
         </LinearGradient>
-        <View style={{ padding: 20, gap: 16 }}>
-          {!!trial && (
-            <View
-              style={{
-                flexDirection: "row",
-                backgroundColor: colors.white,
-                borderRadius: 28,
-                paddingVertical: 20,
-                ...shadow(0.06),
-              }}
-            >
-              {(
-                [
-                  ["sparkles", "Today", "Full Pro access", true],
-                  ["clock", `Day ${trial - 1}`, "We remind you", true],
-                  ["check", `Day ${trial}`, "Trial ends", false],
-                ] as const
-              ).map(([icon, day, text, dark]) => (
+
+        <View style={{ padding: 20, gap: 12 }}>
+          <Body
+            style={{
+              fontFamily: fonts.bold,
+              color: colors.ink,
+              marginBottom: 2,
+            }}
+          >
+            Choose your plan
+          </Body>
+          {plans.map((plan) => {
+            const active = selected === plan.id;
+            return (
+              <Pressable
+                key={plan.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: active }}
+                onPress={() => setSelected(plan.id)}
+                style={{
+                  backgroundColor: active ? "#FFF4A8" : colors.white,
+                  borderColor: active ? colors.ink : "#E6E0D2",
+                  borderWidth: active ? 2 : 1,
+                  borderRadius: 22,
+                  padding: 16,
+                  gap: 7,
+                  ...shadow(active ? 0.08 : 0.03),
+                }}
+              >
                 <View
-                  key={day}
-                  style={{ flex: 1, alignItems: "center", gap: 6 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
                 >
                   <View
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: dark ? colors.ink : "#ECE7DD",
+                      flexDirection: "row",
                       alignItems: "center",
-                      justifyContent: "center",
+                      gap: 10,
+                      flex: 1,
                     }}
                   >
-                    <Icon
-                      name={icon}
-                      size={18}
-                      color={dark ? colors.yellow : colors.ink}
-                    />
+                    <View
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        borderWidth: 2,
+                        borderColor: active ? colors.ink : colors.inactive,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {active && (
+                        <View
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: colors.ink,
+                          }}
+                        />
+                      )}
+                    </View>
+                    <Heading size={20}>{plan.title}</Heading>
                   </View>
-                  <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>
-                    {day}
-                  </Text>
-                  <Body style={{ fontSize: 14 }}>{text}</Body>
+                  {plan.featured && (
+                    <Text
+                      style={{
+                        color: colors.ink,
+                        backgroundColor: colors.yellow,
+                        fontFamily: fonts.bold,
+                        fontSize: 11,
+                        paddingHorizontal: 9,
+                        paddingVertical: 5,
+                        borderRadius: 12,
+                      }}
+                    >
+                      BEST VALUE
+                    </Text>
+                  )}
                 </View>
-              ))}
-            </View>
-          )}
-          <View style={{ gap: 10 }}>
-            {BENEFITS.map((benefit) => (
+                <Body style={{ marginLeft: 30, fontSize: 14 }}>
+                  {plan.description}
+                </Body>
+                <Text
+                  style={{
+                    marginLeft: 30,
+                    color: colors.ink,
+                    fontFamily: fonts.bold,
+                    fontSize: 17,
+                  }}
+                >
+                  {price(plan.id, plan.fallback)}
+                  {plan.id === "monthly"
+                    ? " / month"
+                    : plan.id === "yearly"
+                      ? " / year"
+                      : ""}
+                </Text>
+              </Pressable>
+            );
+          })}
+
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderRadius: 22,
+              padding: 16,
+              gap: 8,
+              marginTop: 2,
+            }}
+          >
+            <Heading size={19}>Free is always yours</Heading>
+            <Body style={{ fontSize: 14 }}>
+              Three try-ons to start, plus the stylist and battles. Browse and
+              save inspiration on Free or Pro.
+            </Body>
+          </View>
+
+          <View style={{ gap: 8, marginTop: 2 }}>
+            {[
+              "Pro: store links and 2 included 360° views each month",
+              "One credit for each successful garment try-on",
+              "Failed generations return the reserved credits",
+              "Your try-on photo stays private",
+            ].map((benefit) => (
               <View
                 key={benefit}
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
               >
-                <Icon name="check" size={20} color="#127A55" />
-                <Body style={{ flex: 1, color: colors.ink, fontSize: 17 }}>
+                <Icon name="check" size={18} color="#127A55" />
+                <Body style={{ flex: 1, color: colors.ink, fontSize: 14 }}>
                   {benefit}
                 </Body>
               </View>
             ))}
           </View>
-          {(
-            [
-              [
-                "pro_monthly",
-                "Pro monthly",
-                pro
-                  ? pro.trialDays
-                    ? `${pro.trialDays} days free, then ${pro.price}/month`
-                    : `${pro.price}/month`
-                  : "Monthly subscription",
-              ],
-              [
-                "tryon_pack",
-                "Try-on pack",
-                pack
-                  ? `${pack.price} for ${pack.credits} try-ons · no subscription`
-                  : "One-time credits · no subscription",
-              ],
-            ] as const
-          ).map(([id, title, subtitle]) => {
-            const on = selected === id;
-            return (
-              <Pressable
-                key={id}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: on }}
-                onPress={() => setSelected(id)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: 18,
-                  borderRadius: 24,
-                  borderWidth: 2.5,
-                  borderColor: on ? colors.ink : "transparent",
-                  backgroundColor: on ? "#FFF6B8" : colors.white,
-                  marginTop: id === "pro_monthly" ? 8 : 0,
-                }}
-              >
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    borderWidth: on ? 9 : 2,
-                    borderColor: on ? colors.ink : "#CFCAD9",
-                    backgroundColor: colors.white,
-                  }}
-                />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={{ fontFamily: fonts.bold, fontSize: 19 }}>
-                    {title}
-                  </Text>
-                  <Body style={{ fontSize: 15 }}>{subtitle}</Body>
-                </View>
-                {id === "pro_monthly" && (
-                  <StickerBadge
-                    rotate="4deg"
-                    style={{ position: "absolute", right: 14, top: -18 }}
-                  >
-                    Most popular
-                  </StickerBadge>
-                )}
-              </Pressable>
-            );
-          })}
+
           <Button
-            icon="sparkles"
             title={
-              !plan
-                ? "Purchases open soon"
-                : selected === "tryon_pack"
-                  ? `Buy ${plan.credits} try-ons`
-                  : trial
-                    ? "Start my free trial"
-                    : "Subscribe"
+              loading
+                ? "Connecting to Apple…"
+                : selectedPackage
+                  ? `Continue · ${price(selected, selected === "yearly" ? "$49.99/year" : selected === "monthly" ? "$9.99/month" : "$4.99")}`
+                  : purchasesAvailable()
+                    ? "This offer is being set up"
+                    : "Purchases aren’t configured yet"
             }
-            disabled={!plan}
-            style={{ minHeight: 60, borderRadius: 22 }}
-            onPress={unavailable}
+            disabled={!selectedPackage || loading}
+            style={{ minHeight: 60, borderRadius: 22, marginTop: 4 }}
+            onPress={() => void purchase()}
           />
-          <Body style={{ textAlign: "center", fontSize: 14 }}>
-            {!plan
-              ? "Payments aren’t connected yet. Your free try-ons still work."
-              : selected === "tryon_pack"
-                ? "One-time purchase. No subscription."
-                : trial
-                  ? "No charge today. Cancel anytime in Settings."
-                  : `${plan.price}/month. Cancel anytime.`}
+          <Body style={{ textAlign: "center", fontSize: 13 }}>
+            {purchaseMessage ||
+              (selected === "monthly"
+                ? "3-day trial if eligible, then renews at the App Store price. Cancel anytime in Apple settings."
+                : selected === "yearly"
+                  ? "Billed yearly. 50 try-ons and 2 included 360° views refresh monthly; unused monthly allowances expire."
+                  : "One-time App Store purchase. Purchased try-ons never expire.")}
           </Body>
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={loading || !purchasesAvailable()}
+            onPress={() => void restore()}
+            style={{
+              minHeight: 44,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: colors.ink,
+                fontFamily: fonts.medium,
+                textDecorationLine: "underline",
+              }}
+            >
+              Restore purchases
+            </Text>
+          </Pressable>
           <View
             style={{ flexDirection: "row", justifyContent: "center", gap: 28 }}
           >
@@ -274,6 +385,19 @@ export default function Paywall() {
               <Body>Privacy</Body>
             </Pressable>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={close}
+            style={{
+              minHeight: 48,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Body style={{ color: colors.ink, fontFamily: fonts.bold }}>
+              Continue with Free · keep browsing
+            </Body>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
