@@ -245,3 +245,64 @@ export class FashnProvider implements TryOnProvider {
     }
   }
 }
+
+// Google Gemini image editing: the person photo is edited in place, so face,
+// pose, background and the rest of the outfit stay as they were. One
+// synchronous call (~25 s, about $0.13 at 2K). No retries: a repeat costs twice.
+export const GEMINI_TRYON_MODEL = "gemini-3-pro-image";
+const TRYON_PROMPT =
+  "Virtual try-on. The first image is a real photo of a person. The following image(s) show clothing items. " +
+  "Edit the first image so the person wears the clothing item(s), replacing only the garment each item would cover. " +
+  "Reproduce each item exactly: colour, fabric, texture, collar, pockets, stitching, logos, and the same fastenings " +
+  "(buttons, snaps or zips only where the item has them). Fit and drape it naturally on their body and pose. " +
+  "Keep everything else identical to the first image: the face and facial features, expression, hair, skin tone, " +
+  "body shape, pose, hands, every other piece of clothing, background, lighting and camera framing. " +
+  "Do not beautify, restyle, crop or change the person. Photorealistic, sharp, high detail.";
+export async function geminiTryOn(
+  key: string,
+  person: string,
+  garments: string[],
+  request: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const response = await request(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TRYON_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(120000),
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              // Inputs are validated JPEG data URIs from private storage.
+              ...[person, ...garments].map((uri) => ({
+                inline_data: { mime_type: "image/jpeg", data: uri.slice(23) },
+              })),
+              { text: TRYON_PROMPT },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          imageConfig: { imageSize: "2K" },
+        },
+      }),
+    },
+  );
+  const data = await responseJson(response);
+  const parts = (
+    data.candidates as
+      { content?: { parts?: Record<string, unknown>[] } }[] | undefined
+  )?.[0]?.content?.parts;
+  const image = parts
+    ?.map(
+      (part) =>
+        (part.inlineData ?? part.inline_data) as { data?: unknown } | undefined,
+    )
+    .find((inline) => typeof inline?.data === "string");
+  // No image back means the model declined (e.g. safety) or failed.
+  if (!image || (image.data as string).length > MAX_IMAGE_BYTES * 1.4)
+    throw new Error("GENERATION_FAILED");
+  return Uint8Array.from(atob(image.data as string), (c) => c.charCodeAt(0));
+}

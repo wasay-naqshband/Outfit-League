@@ -56,7 +56,8 @@ export async function preparePhoto(
   const input = { uri, width, height };
   if (input.width < 64 || input.height < 64)
     throw new Error("Please choose a larger, clearer photo.");
-  const ratio = Math.min(1, 1600 / Math.max(input.width, input.height));
+  // Full detail for 2K results; the 8 MB cap below still applies.
+  const ratio = Math.min(1, 2400 / Math.max(input.width, input.height));
   const output = await ImageManipulator.manipulateAsync(
     input.uri,
     [
@@ -67,7 +68,7 @@ export async function preparePhoto(
         },
       },
     ],
-    { format: ImageManipulator.SaveFormat.JPEG, compress: 0.85, base64: true },
+    { format: ImageManipulator.SaveFormat.JPEG, compress: 0.9, base64: true },
   );
   if (!output.base64)
     throw new Error(

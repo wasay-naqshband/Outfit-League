@@ -9,7 +9,11 @@ import {
   validateJpeg,
   readRequestJson,
 } from "../_shared/domain.ts";
-import { FashnProvider, GenlookProvider } from "../_shared/provider.ts";
+import {
+  FashnProvider,
+  geminiTryOn,
+  GenlookProvider,
+} from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
@@ -26,14 +30,24 @@ const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const bucket = db.storage.from("tryon-private");
-const providerName = env("TRYON_PROVIDER") === "genlook" ? "Genlook" : "FASHN";
+const providerName =
+  env("TRYON_PROVIDER") === "gemini"
+    ? "Gemini"
+    : env("TRYON_PROVIDER") === "genlook"
+      ? "Genlook"
+      : "FASHN";
 const providers = {
   Genlook: new GenlookProvider(env("GENLOOK_API_KEY"), fetch, normalizeResult),
   FASHN: new FashnProvider(env("FASHN_API_KEY")),
 };
-const provider = providers[providerName];
 const providerKey = (name: string) =>
-  env(name === "Genlook" ? "GENLOOK_API_KEY" : "FASHN_API_KEY");
+  env(
+    name === "Gemini"
+      ? "GEMINI_API_KEY"
+      : name === "Genlook"
+        ? "GENLOOK_API_KEY"
+        : "FASHN_API_KEY",
+  );
 const spinEnabled = () => !!env("GEMINI_API_KEY");
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 type Spin = {
@@ -115,10 +129,72 @@ async function readInput(id: string, owner: string): Promise<string> {
   validateJpeg(bytes);
   return "data:image/jpeg;base64," + toBase64(bytes);
 }
+// Saves the finished image as the job's private result and settles the credit.
+async function storeResult(job: Job, bytes: Uint8Array) {
+  const path = job.owner_id + "/" + job.id + ".jpg";
+  // Deterministic path + overwrite=false make concurrent polling safe.
+  const upload = await bucket.upload(path, bytes, {
+    contentType: "image/jpeg",
+    upsert: false,
+  });
+  if (upload.error && String(upload.error.statusCode) !== "409")
+    throw new Error("STORE_RESULT_FAILED");
+  checked(
+    await db.from("private_assets").upsert(
+      {
+        id: job.id,
+        owner_id: job.owner_id,
+        kind: "result",
+        path,
+        byte_size: bytes.length,
+        content_type: "image/jpeg",
+      },
+      { onConflict: "id", ignoreDuplicates: true },
+    ),
+  );
+  await rpc("finish_tryon", { p_job: job.id, p_result: job.id });
+}
+// Gemini answers in one long call, so it runs after the request returns; the
+// app keeps polling "status". A dead worker is refunded when the job expires.
+async function runGemini(job: Job) {
+  try {
+    const [person, ...garments] = await Promise.all(
+      [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
+        (id) => readInput(id, job.owner_id),
+      ),
+    );
+    const bytes = await normalizeResult(
+      await geminiTryOn(providerKey("Gemini"), person, garments),
+    );
+    validateJpeg(bytes);
+    await storeResult(job, bytes);
+  } catch (error) {
+    const code =
+      error instanceof Error &&
+      [
+        "PROVIDER_BUSY",
+        "INVALID_RESULT",
+        "INVALID_IMAGE",
+        "IMAGE_DIMENSIONS",
+      ].includes(error.message)
+        ? error.message
+        : "GENERATION_FAILED";
+    await rpc("finish_tryon", { p_job: job.id, p_error: code }).catch(() => {});
+  }
+}
 async function submitJob(job: Job) {
   if (!enabled()) return; // Remains pending; worker resumes when explicitly enabled.
   const claimed = await rpc("claim_tryon", { p_job: job.id });
   if (!claimed) return;
+  if (providerName === "Gemini") {
+    await rpc("attach_prediction", {
+      p_job: job.id,
+      p_prediction: "gemini:" + job.id,
+    });
+    EdgeRuntime.waitUntil(runGemini(job));
+    return;
+  }
+  const provider = providers[providerName];
   try {
     const [person, garment, ...more] = await Promise.all(
       [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
@@ -158,7 +234,7 @@ async function syncJob(job: Job) {
     await submitJob(job);
     return;
   }
-  if (!job.provider_id) return;
+  if (!job.provider_id || job.provider_id.startsWith("gemini:")) return;
   const jobProvider = job.provider_id.startsWith("genlook:")
     ? "Genlook"
     : "FASHN";
@@ -185,29 +261,7 @@ async function syncJob(job: Job) {
     });
   } else if (prediction.state === "completed" && prediction.image) {
     try {
-      const bytes = decodeResult(prediction.image);
-      const path = job.owner_id + "/" + job.id + ".jpg";
-      // Deterministic path + overwrite=false make concurrent polling safe.
-      const upload = await bucket.upload(path, bytes, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
-      if (upload.error && String(upload.error.statusCode) !== "409")
-        throw new Error("STORE_RESULT_FAILED");
-      checked(
-        await db.from("private_assets").upsert(
-          {
-            id: job.id,
-            owner_id: job.owner_id,
-            kind: "result",
-            path,
-            byte_size: bytes.length,
-            content_type: "image/jpeg",
-          },
-          { onConflict: "id", ignoreDuplicates: true },
-        ),
-      );
-      await rpc("finish_tryon", { p_job: job.id, p_result: job.id });
+      await storeResult(job, decodeResult(prediction.image));
     } catch (error) {
       if (
         error instanceof Error &&
@@ -469,7 +523,7 @@ Deno.serve(async (req) => {
       return reply({
         enabled: enabled(),
         spinEnabled: spinEnabled(),
-        provider: providerName,
+        provider: providerName === "Gemini" ? "Google Gemini" : providerName,
         consentVersion: CONSENT_VERSION,
         maxImageBytes: MAX_IMAGE_BYTES,
       });
@@ -543,8 +597,8 @@ Deno.serve(async (req) => {
         !extra.every(uuid) ||
         !Array.isArray(parts) ||
         !parts.every((part) => ["top", "bottom", "outer"].includes(part)) ||
-        // Only Genlook wears several pieces at once.
-        (extra.length && providerName !== "Genlook")
+        // FASHN wears only one piece at a time.
+        (extra.length && providerName === "FASHN")
       )
         throw new Error("INVALID_REQUEST");
       const reserved = await rpc("reserve_tryon", {
