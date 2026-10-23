@@ -48,3 +48,45 @@ test("Gemini try-on fails cleanly on refusals and rate limits, without retrying"
   );
   assert.equal(calls, 1);
 });
+
+test("360° view: studio still first, then a 1080p spin that starts and ends on it", async () => {
+  const { generateSpinVideo } =
+    await import("../supabase/functions/_shared/spin.ts");
+  const look = "data:image/jpeg;base64,AAAA";
+  const mp4 = new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 1, 2]);
+  const seen: string[] = [];
+  const video = await generateSpinVideo("k", look, (async (
+    url: string,
+    options: RequestInit,
+  ) => {
+    seen.push(url);
+    const body = JSON.parse(String(options.body));
+    if (url.includes("gemini-3-pro-image"))
+      return Response.json({
+        candidates: [
+          { content: { parts: [{ inlineData: { data: "STILL" } }] } },
+        ],
+      });
+    assert.deepEqual(
+      body.input.slice(0, 2).map((p: { data: string }) => p.data),
+      ["STILL", "STILL"],
+    );
+    assert.equal(body.response_format.resolution, "1080p");
+    return Response.json({
+      steps: [
+        {
+          type: "model_output",
+          content: [
+            {
+              type: "video",
+              mime_type: "video/mp4",
+              data: btoa(String.fromCharCode(...mp4)),
+            },
+          ],
+        },
+      ],
+    });
+  }) as typeof fetch);
+  assert.deepEqual(video, mp4);
+  assert.equal(seen.length, 2);
+});

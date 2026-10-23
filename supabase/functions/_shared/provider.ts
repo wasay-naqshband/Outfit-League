@@ -256,7 +256,9 @@ const TRYON_PROMPT =
   "Reproduce each item exactly: colour, fabric, texture, collar, pockets, stitching, logos, and the same fastenings " +
   "(buttons, snaps or zips only where the item has them). Fit and drape it naturally on their body and pose. " +
   "Keep everything else identical to the first image: the face and facial features, expression, hair, skin tone, " +
-  "body shape, pose, hands, every other piece of clothing, background, lighting and camera framing. " +
+  "body shape, pose, hands, background, lighting and camera framing. " +
+  "Every piece of clothing the items do not replace must stay exactly as it is, with the same colour, length and style: " +
+  "a jacket or top never changes the trousers, shalwar, skirt or shoes, and a long shirt or kurta keeps its full length and hem. " +
   "Do not beautify, restyle, crop or change the person. Photorealistic, sharp, high detail.";
 export async function geminiTryOn(
   key: string,
