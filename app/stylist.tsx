@@ -1,45 +1,59 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Image } from "expo-image";
+import {
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { router } from "expo-router";
+import { randomUUID } from "expo-crypto";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Body,
-  Button,
-  FlatHeader,
-  Heading,
-  LoadingSkeleton,
-  Page,
-} from "../src/components/ui";
-import { Bullets, Swatches } from "../src/components/Stylist";
+import { Body, Button, FlatHeader, Heading, Page } from "../src/components/ui";
+import { Bullets } from "../src/components/Stylist";
+import { ProductCard } from "../src/components/Lookalikes";
+import { CookingLoader, TRYON_MESSAGES } from "../src/components/CookingLoader";
 import { useApp } from "../src/lib/state";
-import { supabase } from "../src/lib/supabase";
+import { useSavedPhoto, useTryOnConfig, useWallet } from "../src/lib/queries";
+import { styleLabel, useOnboarding } from "../src/lib/onboarding";
+import { agreedOnce } from "../src/lib/consent";
+import { outOfCredits } from "../src/lib/credits";
 import {
-  colorProfile,
+  callTryOn,
   pickOutfit,
-  type ColorProfile,
+  pieceLink,
+  shopPiece,
+  uploadPhoto,
   type OutfitPick,
+  type OutfitPiece,
 } from "../src/lib/tryon-api";
-import {
-  libraryGarment,
-  libraryItem,
-  type LibraryItem,
-} from "../src/lib/library";
-import { useTryOnDraft } from "../src/lib/tryon-draft";
-import { friendlyError } from "../src/types/tryon";
-import { colors, fonts } from "../src/theme";
+import { friendlyError, type JobView } from "../src/types/tryon";
+import { colors, fonts, shadow } from "../src/theme";
 
 const OCCASIONS = [
   ["Today ☀️", "An everyday outfit for today"],
+  ["Weekend 🛋️", "A relaxed weekend"],
   ["Date night 💕", "A date night"],
+  ["Party 🎉", "A party tonight"],
   ["Work 💼", "A day at the office"],
   ["Wedding 💍", "A wedding, as a guest"],
-  ["Party 🎉", "A party tonight"],
-  ["Weekend 🛋️", "A relaxed weekend"],
 ] as const;
-// The try-on provider wears clothing only, not shoes or accessories.
-const WEARABLE = ["Tops", "Shirts", "Hoodies", "Jackets", "Bottoms", "Dresses"];
-
+const STYLING_MESSAGES = [
+  "Reading the room… 👀",
+  "Pulling pieces from every rail…",
+  "Balancing colours and layers…",
+  "Adding the finishing touch ✨",
+];
+const PART: Record<OutfitPiece["part"], [string, string]> = {
+  top: ["👕", "Top"],
+  layer: ["🧥", "Layer"],
+  bottoms: ["👖", "Bottoms"],
+  shoes: ["👟", "Shoes"],
+  accessory: ["🧢", "Extra"],
+};
 const card = {
   backgroundColor: colors.white,
   borderRadius: 28,
@@ -47,66 +61,222 @@ const card = {
   gap: 14,
 } as const;
 
+// One outfit piece: what it is, and either "in your closet" or real products
+// to buy it (Shop the look).
+function PieceRow({ piece }: { piece: OutfitPiece }) {
+  const [open, setOpen] = useState(false);
+  const [opening, setOpening] = useState(-1);
+  const [error, setError] = useState("");
+  const shop = useQuery({
+    queryKey: ["shop-piece", piece.query],
+    queryFn: () => shopPiece(piece.query),
+    enabled: open,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const [emoji, label] = PART[piece.part];
+  async function buy(index: number) {
+    const item = shop.data?.items[index];
+    if (!item || opening >= 0) return;
+    setOpening(index);
+    setError("");
+    try {
+      await Linking.openURL((await pieceLink(item)).url);
+    } catch (e) {
+      setError(friendlyError(e));
+    } finally {
+      setOpening(-1);
+    }
+  }
+  return (
+    <View
+      style={{
+        borderTopWidth: 1,
+        borderTopColor: colors.cream,
+        paddingTop: 12,
+        gap: 10,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: colors.cream,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>{emoji}</Text>
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text
+            style={{
+              fontFamily: fonts.bold,
+              fontSize: 11,
+              letterSpacing: 1,
+              color: colors.text3,
+            }}
+          >
+            {label.toUpperCase()}
+          </Text>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 15 }}>
+            {piece.name}
+          </Text>
+        </View>
+        {piece.closetId ? (
+          <Text
+            style={{
+              overflow: "hidden",
+              borderRadius: 12,
+              paddingHorizontal: 10,
+              paddingVertical: 5,
+              backgroundColor: "#CFF5E4",
+              color: "#127A55",
+              fontFamily: fonts.bold,
+              fontSize: 12,
+            }}
+          >
+            ✓ In your closet
+          </Text>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Shop ${piece.name}`}
+            onPress={() => setOpen((v) => !v)}
+            style={{
+              borderRadius: 16,
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              backgroundColor: open ? colors.ink : colors.yellow,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: fonts.bold,
+                fontSize: 13,
+                color: open ? colors.white : colors.ink,
+              }}
+            >
+              {open ? "Hide" : "Shop"}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+      {open &&
+        (shop.isPending ? (
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <ActivityIndicator color={colors.ink} />
+            <Body style={{ fontSize: 13 }}>Finding it in stores…</Body>
+          </View>
+        ) : shop.isError || !shop.data.items.length ? (
+          <Body style={{ fontSize: 13 }}>No matches in stores right now.</Body>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+          >
+            {shop.data.items.map((item, i) => (
+              <ProductCard
+                key={item.url}
+                item={item}
+                badge={i === 0 ? "Cheapest" : null}
+                busy={opening === i}
+                disabled={opening >= 0}
+                onBuy={() => void buy(i)}
+              />
+            ))}
+          </ScrollView>
+        ))}
+      {!!error && <Body style={{ fontSize: 13 }}>{error}</Body>}
+    </View>
+  );
+}
+
+// AI Stylist: a full outfit for any occasion, shown on the user's own photo.
+// Writing the outfit and Shop the look are free; the photo uses 1 credit.
 export default function Stylist() {
   const { session } = useApp();
   const client = useQueryClient();
-  const draft = useTryOnDraft();
+  const styles = useOnboarding().answers.styles.map(styleLabel);
+  const saved = useSavedPhoto();
+  const wallet = useWallet();
+  const config = useTryOnConfig();
   const [occasion, setOccasion] = useState<string>(OCCASIONS[0][1]);
   const [details, setDetails] = useState("");
-  const [pick, setPick] = useState<
-    (OutfitPick & { pieces: LibraryItem[] }) | null
-  >(null);
-  const [busy, setBusy] = useState("");
+  const [outfit, setOutfit] = useState<OutfitPick | null>(null);
+  const [emptyCloset, setEmptyCloset] = useState(false);
+  const [busy, setBusy] = useState<"" | "style" | "closet" | "photo">("");
   const [error, setError] = useState("");
-  const palette = useQuery({
-    queryKey: ["color-profile", session?.user.id],
-    enabled: !!session && !!supabase,
-    queryFn: async () => {
-      const { data } = await supabase!
-        .from("profiles")
-        .select("color_profile")
-        .single();
-      return (data?.color_profile ?? null) as ColorProfile | null;
-    },
-  });
+  const startedAt = React.useRef(0);
+  const request = details.trim() ? `${occasion}. ${details.trim()}` : occasion;
 
-  async function run(task: string, work: () => Promise<void>) {
+  async function style(closet: boolean) {
     if (busy) return;
-    setBusy(task);
+    setBusy(closet ? "closet" : "style");
     setError("");
+    setEmptyCloset(false);
     try {
-      await work();
+      const result = await pickOutfit(request, styles, closet);
+      if (result.emptyCloset) setEmptyCloset(true);
+      else setOutfit(result.outfit);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
       setBusy("");
     }
   }
-  const styleMe = () =>
-    run("outfit", async () => {
-      const { outfit } = await pickOutfit(
-        details.trim() ? `${occasion}. ${details.trim()}` : occasion,
-      );
-      const pieces = await Promise.all(
-        outfit.items.map((id) => libraryItem(id).catch(() => null)),
-      );
-      setPick({ ...outfit, pieces: pieces.filter((p) => !!p) });
-    });
-  const findColors = (refresh = false) =>
-    run("colors", async () => {
-      const { colors } = await colorProfile(refresh);
-      client.setQueryData(["color-profile", session?.user.id], colors);
-    });
-  const tryOutfit = () =>
-    run("try", async () => {
-      const piece = pick?.pieces.find((p) => WEARABLE.includes(p.category));
-      if (piece) draft.setGarment(await libraryGarment(piece));
-      router.push("/(tabs)/try-on");
-    });
-  const wearable = pick?.pieces.some((p) => WEARABLE.includes(p.category));
+
+  async function seeItOnMe() {
+    if (busy || !outfit) return;
+    if (!saved.data) return router.push("/my-photo");
+    if ((wallet.data?.available ?? 0) < 1) return outOfCredits();
+    if (!(await agreedOnce(config.data?.provider ?? "the AI provider"))) return;
+    startedAt.current = Date.now();
+    setBusy("photo");
+    setError("");
+    try {
+      const person = await uploadPhoto(saved.data, "person");
+      const description = outfit.pieces
+        .map((p) => `${PART[p.part][1]}: ${p.name}`)
+        .join(". ");
+      const result = await callTryOn<JobView>({
+        action: "start",
+        key: randomUUID(),
+        person,
+        outfit: description,
+        consent: "tryon-v1",
+      });
+      await client.invalidateQueries({ queryKey: ["wallet"] });
+      await client.invalidateQueries({ queryKey: ["tryon-history"] });
+      router.push({
+        pathname: "/generation/[id]",
+        params: { id: result.job.id, t: String(startedAt.current) },
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === "NO_CREDITS") outOfCredits();
+      else setError(friendlyError(e));
+    } finally {
+      setBusy("");
+    }
+  }
 
   return (
     <Page>
+      <Modal
+        visible={busy === "photo"}
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <CookingLoader
+          fullScreen
+          messages={TRYON_MESSAGES}
+          seconds={25}
+          startedAt={startedAt.current}
+        />
+      </Modal>
       <FlatHeader title="AI Stylist" />
       <View style={{ padding: 20, gap: 18 }}>
         {!session ? (
@@ -119,7 +289,8 @@ export default function Stylist() {
             <View style={card}>
               <Heading size={24}>What should I wear?</Heading>
               <Body style={{ fontSize: 14 }}>
-                Picks an outfit from your closet for the moment.
+                Tell me where you’re going. I’ll style a full outfit and show it
+                on you.
               </Body>
               <ScrollView
                 horizontal
@@ -157,7 +328,7 @@ export default function Stylist() {
                 value={details}
                 onChangeText={setDetails}
                 maxLength={150}
-                placeholder="Details? e.g. it’s cold, outdoor, smart casual"
+                placeholder="Details? e.g. it’s cold, streetwear vibe"
                 placeholderTextColor={colors.placeholder}
                 style={{
                   backgroundColor: colors.cream,
@@ -170,154 +341,85 @@ export default function Stylist() {
               />
               <Button
                 icon="sparkles"
-                title={busy === "outfit" ? "Styling you…" : "Style me"}
+                title={busy === "style" ? "Styling you…" : "Style me"}
                 disabled={!!busy}
-                onPress={() => void styleMe()}
+                onPress={() => void style(false)}
               />
-              {pick && (
-                <View style={{ gap: 12 }}>
-                  <Heading size={21}>{pick.title}</Heading>
-                  <Body style={{ fontSize: 15 }}>{pick.why}</Body>
-                  {!!pick.pieces.length && (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={{ gap: 10 }}
-                    >
-                      {pick.pieces.map((piece) => (
-                        <Pressable
-                          key={piece.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Open ${piece.name}`}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/library-item/[id]",
-                              params: { id: piece.id },
-                            })
-                          }
-                          style={{ width: 104, gap: 6 }}
-                        >
-                          <View
-                            style={{
-                              width: 104,
-                              height: 130,
-                              borderRadius: 18,
-                              overflow: "hidden",
-                              backgroundColor: colors.cream,
-                            }}
-                          >
-                            {piece.photoUrl && (
-                              <Image
-                                source={{ uri: piece.photoUrl }}
-                                contentFit="cover"
-                                cachePolicy="none"
-                                style={{ width: "100%", height: "100%" }}
-                              />
-                            )}
-                          </View>
-                          <Text
-                            numberOfLines={1}
-                            style={{ fontFamily: fonts.medium, fontSize: 13 }}
-                          >
-                            {piece.name}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  )}
-                  {!!pick.missing.length && (
-                    <>
-                      <Heading size={16}>Worth adding</Heading>
-                      <Bullets items={pick.missing} mark="🛍️" />
-                    </>
-                  )}
-                  {!!pick.tips.length && (
-                    <Bullets items={pick.tips} mark="💡" />
-                  )}
-                  {wearable && (
-                    <Button
-                      secondary
-                      icon="sparkles"
-                      title={busy === "try" ? "Getting it ready…" : "Try it on"}
-                      disabled={!!busy}
-                      onPress={() => void tryOutfit()}
-                    />
-                  )}
-                  {!pick.pieces.length && (
-                    <Button
-                      secondary
-                      icon="plus"
-                      title="Add your clothes for picks from your closet"
-                      onPress={() =>
-                        router.push({
-                          pathname: "/library-edit",
-                          params: { kind: "wardrobe" },
-                        })
-                      }
-                    />
-                  )}
-                </View>
-              )}
             </View>
 
-            <View style={card}>
-              <Heading size={24}>Your colours</Heading>
-              {palette.isPending ? (
-                <LoadingSkeleton />
-              ) : palette.data ? (
-                <>
-                  <Heading size={20}>{palette.data.season}</Heading>
-                  <Body style={{ fontSize: 15 }}>{palette.data.summary}</Body>
-                  <Swatches title="Wear these" items={palette.data.best} />
-                  <Swatches
-                    title="Easy neutrals"
-                    items={palette.data.neutrals}
-                  />
-                  <Swatches
-                    title="Keep away from your face"
-                    items={palette.data.avoid}
-                  />
-                  {!!palette.data.tips.length && (
-                    <Bullets items={palette.data.tips} mark="💡" />
-                  )}
-                  <Button
-                    secondary
-                    title={
-                      busy === "colors"
-                        ? "Reading your colours…"
-                        : "Redo with my current photo"
-                    }
-                    disabled={!!busy}
-                    onPress={() => void findColors(true)}
-                  />
-                </>
-              ) : (
-                <>
-                  <Body style={{ fontSize: 14 }}>
-                    Find the colours that make you glow, from your try-on photo.
-                    Use one taken in daylight.
-                  </Body>
-                  <Button
-                    icon="sparkles"
-                    title={
-                      busy === "colors"
-                        ? "Reading your colours…"
-                        : "Find my colours"
-                    }
-                    disabled={!!busy}
-                    onPress={() => void findColors()}
-                  />
-                </>
-              )}
-              {error.includes("try-on photo") && (
+            {(busy === "style" || busy === "closet") && (
+              <CookingLoader
+                messages={STYLING_MESSAGES}
+                seconds={8}
+                height={230}
+              />
+            )}
+
+            {emptyCloset && (
+              <View style={card}>
+                <Heading size={20}>Your closet is empty</Heading>
+                <Body style={{ fontSize: 14 }}>
+                  Add the clothes you already own, and I’ll style you from them
+                  next time.
+                </Body>
                 <Button
                   secondary
-                  icon="camera"
-                  title="Add your try-on photo"
-                  onPress={() => router.push("/my-photo")}
+                  icon="plus"
+                  title="Add clothes you own"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/library-edit",
+                      params: { kind: "wardrobe" },
+                    })
+                  }
                 />
-              )}
-            </View>
+              </View>
+            )}
+
+            {outfit && !busy && (
+              <View style={{ ...card, ...shadow(0.06) }}>
+                <Heading size={22}>{outfit.title}</Heading>
+                <Body style={{ fontSize: 15 }}>{outfit.why}</Body>
+                <View style={{ gap: 12 }}>
+                  {outfit.pieces.map((piece) => (
+                    <PieceRow key={piece.part + piece.name} piece={piece} />
+                  ))}
+                </View>
+                {!!outfit.tips.length && (
+                  <View style={{ gap: 8 }}>
+                    <Heading size={17}>Styling tips</Heading>
+                    <Bullets items={outfit.tips} mark="💡" />
+                  </View>
+                )}
+                <Button
+                  icon="sparkles"
+                  title={
+                    saved.data
+                      ? "See it on me · 1 credit"
+                      : "Add your photo to see it on you"
+                  }
+                  onPress={() => void seeItOnMe()}
+                />
+                <Button
+                  secondary
+                  icon="hanger"
+                  title="Choose from my closet"
+                  onPress={() => void style(true)}
+                />
+                <Text
+                  style={{
+                    fontFamily: fonts.body,
+                    fontSize: 11,
+                    color: colors.text3,
+                    textAlign: "center",
+                  }}
+                >
+                  Shop links go to the store. We may earn a commission from some
+                  links.
+                </Text>
+              </View>
+            )}
+
             {!!error && (
               <Body
                 style={{
@@ -329,10 +431,6 @@ export default function Stylist() {
                 {error}
               </Body>
             )}
-            <Body style={{ fontSize: 12, textAlign: "center" }}>
-              Advice is AI-generated by Google Gemini. Your closet details and,
-              for colours, your try-on photo are sent privately to make it.
-            </Body>
           </>
         )}
       </View>

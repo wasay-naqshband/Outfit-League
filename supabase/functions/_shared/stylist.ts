@@ -155,17 +155,26 @@ export type ClosetItem = {
   brand: string;
   tags: string;
 };
-export async function pickOutfit(
+export const PIECE_PARTS = [
+  "top",
+  "layer",
+  "bottoms",
+  "shoes",
+  "accessory",
+] as const;
+// AI Stylist: a complete outfit for the occasion, each piece with a shopping
+// query (for Shop the look). With a closet, pieces they own carry its id.
+export async function styleOutfit(
   key: string,
   occasion: string,
-  closet: ClosetItem[],
-  season: string | null,
+  styles: string[],
+  closet: ClosetItem[] | null,
   request: typeof fetch = fetch,
 ) {
-  const listing = closet
+  const listing = (closet ?? [])
     .map(
       (item) =>
-        `${item.id} | ${item.name} | ${item.category} | ${item.color || "-"} | ${item.brand || "-"} | ${item.tags || "-"}`,
+        `${item.id} | ${item.name} | ${item.category} | ${item.color || "-"} | ${item.brand || "-"}`,
     )
     .join("\n");
   const out = await ask(
@@ -173,12 +182,15 @@ export async function pickOutfit(
     [
       {
         text:
-          `Occasion: ${occasion}\n` +
-          (season ? `Their colour season: ${season}\n` : "") +
-          (closet.length
-            ? `Their closet (id | name | category | colour | brand | tags):\n${listing}\n\nBuild one complete outfit from their closet only, using item ids exactly as listed. If something important is missing, say what to add.`
-            : "Their closet is empty. Describe one complete outfit to wear and leave itemIds empty.") +
-          " Give a catchy title, one or two sentences on why it works for the occasion, and up to 3 styling tips.",
+          `Request: ${occasion}\n` +
+          (styles.length ? `Their style: ${styles.join(", ")}\n` : "") +
+          (closet
+            ? `Their closet (id | name | category | colour | brand):\n${listing}\nUse pieces from their closet wherever they fit, giving that piece's closetId exactly as listed; only add new pieces for gaps.\n`
+            : "") +
+          "Style one complete, great-looking outfit for this request: 3 to 6 pieces (top, optional layer, bottoms, shoes, and accessories only if they add something). " +
+          "Describe each piece concretely, colour, fabric and fit, e.g. 'black matte cropped puffer jacket'. " +
+          "For each piece give a short US online shopping query (4 to 8 words, gender if obvious, no brand names). " +
+          "Add a catchy title, one or two sentences on why it works, and up to 3 short styling tips.",
       },
     ],
     {
@@ -186,20 +198,42 @@ export async function pickOutfit(
       properties: {
         title: str,
         why: str,
-        itemIds: list,
-        missing: list,
+        pieces: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              part: { type: "STRING", enum: [...PIECE_PARTS] },
+              name: str,
+              query: str,
+              closetId: str,
+            },
+            required: ["part", "name", "query"],
+          },
+        },
         tips: list,
       },
-      required: ["title", "why", "itemIds", "missing", "tips"],
+      required: ["title", "why", "pieces", "tips"],
     },
     request,
   );
-  const ids = new Set(closet.map((item) => item.id));
+  const owned = new Set((closet ?? []).map((item) => item.id));
+  const pieces = (Array.isArray(out.pieces) ? out.pieces : [])
+    .map((p: Record<string, unknown>) => ({
+      part: PIECE_PARTS.includes(p.part as (typeof PIECE_PARTS)[number])
+        ? (p.part as (typeof PIECE_PARTS)[number])
+        : "accessory",
+      name: line(p.name, 90),
+      query: line(p.query, 90),
+      closetId: owned.has(String(p.closetId)) ? String(p.closetId) : null,
+    }))
+    .filter((p: { name: string; query: string }) => p.name && p.query)
+    .slice(0, 6);
+  if (!pieces.length) throw new Error("STYLIST_FAILED");
   return {
     title: line(out.title, 80),
     why: line(out.why, 300),
-    items: [...new Set(lines(out.itemIds, 6))].filter((id) => ids.has(id)),
-    missing: lines(out.missing, 3),
+    pieces,
     tips: lines(out.tips, 3),
   };
 }

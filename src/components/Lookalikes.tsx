@@ -5,11 +5,15 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, Heading, Icon } from "./ui";
 import { CookingLoader, LOOKALIKE_MESSAGES } from "./CookingLoader";
-import { fetchLookalikes, lookalikeLink } from "../lib/tryon-api";
+import {
+  fetchLookalikes,
+  lookalikeLink,
+  type Lookalike,
+} from "../lib/tryon-api";
 import { friendlyError } from "../types/tryon";
 import { colors, fonts, shadow } from "../theme";
 
-const money = (price: number | null) =>
+export const money = (price: number | null) =>
   price === null
     ? "See price"
     : "$" + (Number.isInteger(price) ? price : price.toFixed(2));
@@ -89,76 +93,14 @@ export function Lookalikes({ id }: { id: string }) {
           contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
         >
           {query.data!.items.map((item, i) => (
-            <View
+            <ProductCard
               key={item.url}
-              style={{
-                width: 172,
-                backgroundColor: colors.white,
-                borderRadius: 22,
-                padding: 10,
-                gap: 8,
-                ...shadow(0.06),
-              }}
-            >
-              <View>
-                <Image
-                  source={{ uri: item.image }}
-                  contentFit="cover"
-                  accessibilityLabel={item.title}
-                  style={{ height: 180, borderRadius: 16 }}
-                />
-                {!!badge(i) && (
-                  <Text
-                    style={{
-                      position: "absolute",
-                      top: 8,
-                      left: 8,
-                      overflow: "hidden",
-                      borderRadius: 10,
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
-                      backgroundColor:
-                        badge(i) === "Cheapest" ? "#127A55" : colors.ink,
-                      color: colors.white,
-                      fontFamily: fonts.bold,
-                      fontSize: 11,
-                    }}
-                  >
-                    {badge(i)}
-                  </Text>
-                )}
-              </View>
-              <Text style={{ fontFamily: fonts.heading, fontSize: 20 }}>
-                {money(item.price)}
-              </Text>
-              <Text
-                numberOfLines={2}
-                style={{
-                  fontFamily: fonts.medium,
-                  fontSize: 13,
-                  minHeight: 34,
-                }}
-              >
-                {item.title}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  fontFamily: fonts.body,
-                  fontSize: 12,
-                  color: colors.text3,
-                }}
-              >
-                {item.store}
-              </Text>
-              <Button
-                title={opening === i ? "Opening…" : "Buy"}
-                icon="shopping-bag"
-                disabled={opening >= 0}
-                style={{ minHeight: 42, borderRadius: 14 }}
-                onPress={() => void buy(i)}
-              />
-            </View>
+              item={item}
+              badge={badge(i)}
+              busy={opening === i}
+              disabled={opening >= 0}
+              onBuy={() => void buy(i)}
+            />
           ))}
           {query.data!.locked > 0 && (
             <Pressable
@@ -211,6 +153,92 @@ export function Lookalikes({ id }: { id: string }) {
         Shopping; check the store before you buy. We may earn a commission from
         some links.
       </Body>
+    </View>
+  );
+}
+
+// One product: photo, price, name, store and Buy. Shared with Shop the look.
+export function ProductCard({
+  item,
+  badge,
+  busy,
+  disabled,
+  onBuy,
+}: {
+  item: Lookalike;
+  badge?: string | null;
+  busy: boolean;
+  disabled: boolean;
+  onBuy: () => void;
+}) {
+  return (
+    <View
+      style={{
+        width: 172,
+        backgroundColor: colors.white,
+        borderRadius: 22,
+        padding: 10,
+        gap: 8,
+        ...shadow(0.06),
+      }}
+    >
+      <View>
+        <Image
+          source={{ uri: item.image }}
+          contentFit="cover"
+          accessibilityLabel={item.title}
+          style={{ height: 180, borderRadius: 16 }}
+        />
+        {!!badge && (
+          <Text
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              overflow: "hidden",
+              borderRadius: 10,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              backgroundColor: badge === "Cheapest" ? "#127A55" : colors.ink,
+              color: colors.white,
+              fontFamily: fonts.bold,
+              fontSize: 11,
+            }}
+          >
+            {badge}
+          </Text>
+        )}
+      </View>
+      <Text style={{ fontFamily: fonts.heading, fontSize: 20 }}>
+        {money(item.price)}
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={{
+          fontFamily: fonts.medium,
+          fontSize: 13,
+          minHeight: 34,
+        }}
+      >
+        {item.title}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={{
+          fontFamily: fonts.body,
+          fontSize: 12,
+          color: colors.text3,
+        }}
+      >
+        {item.store}
+      </Text>
+      <Button
+        title={busy ? "Opening…" : "Buy"}
+        icon="shopping-bag"
+        disabled={disabled}
+        style={{ minHeight: 42, borderRadius: 14 }}
+        onPress={onBuy}
+      />
     </View>
   );
 }

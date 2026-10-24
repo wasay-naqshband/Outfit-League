@@ -132,25 +132,34 @@ export type Rating = {
   good: string[];
   tips: string[];
 };
-export type Swatch = { name: string; hex: string };
-export type ColorProfile = {
-  season: string;
-  summary: string;
-  best: Swatch[];
-  neutrals: Swatch[];
-  avoid: Swatch[];
-  tips: string[];
+export type OutfitPiece = {
+  part: "top" | "layer" | "bottoms" | "shoes" | "accessory";
+  name: string;
+  query: string;
+  /** Set when the piece is already in their closet. */
+  closetId: string | null;
 };
 export type OutfitPick = {
   title: string;
   why: string;
-  items: string[];
-  missing: string[];
+  pieces: OutfitPiece[];
   tips: string[];
 };
 export const rateLook = (id: string) =>
   callTryOn<{ rating: Rating }>({ action: "rate", id });
-export const colorProfile = (refresh = false) =>
-  callTryOn<{ colors: ColorProfile }>({ action: "colors", refresh });
-export const pickOutfit = (occasion: string) =>
-  callTryOn<{ outfit: OutfitPick }>({ action: "outfit", occasion });
+export const pickOutfit = (
+  occasion: string,
+  styles: string[],
+  closet = false,
+) =>
+  callTryOn<{ outfit: OutfitPick | null; emptyCloset?: boolean }>({
+    action: "outfit",
+    occasion,
+    styles,
+    closet,
+  });
+// Shop the look: real products for one piece, and the store's own page.
+export const shopPiece = (query: string) =>
+  callTryOn<{ items: Lookalike[] }>({ action: "shop-piece", query });
+export const pieceLink = (item: Lookalike) =>
+  callTryOn<{ url: string }>({ action: "piece-link", item });

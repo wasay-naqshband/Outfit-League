@@ -118,11 +118,21 @@ const TRYON_PROMPT =
   "Every piece of clothing the items do not replace must stay exactly as it is, with the same colour, length and style: " +
   "a jacket or top never changes the trousers, shalwar, skirt or shoes, and a long shirt or kurta keeps its full length and hem. " +
   "Do not beautify, restyle, crop or change the person. Photorealistic, sharp, high detail.";
+// AI Stylist "See it on me": the same in-place edit, dressed from a written
+// outfit instead of clothing photos.
+export const outfitPrompt = (outfit: string) =>
+  "Edit this real photo so the person wears this complete outfit, replacing what they wear now: " +
+  outfit +
+  " Make every piece look real and well made, with natural fit, drape and texture for their body and pose. " +
+  "No brand names or logos. Keep the face and facial features, expression, hair, skin tone, body shape, pose, hands, " +
+  "background, lighting and camera framing identical to the photo. Do not beautify, restyle, crop or change the person. " +
+  "Photorealistic, sharp, high detail.";
 export async function geminiTryOn(
   key: string,
   person: string,
   garments: string[],
   request: typeof fetch = fetch,
+  prompt = TRYON_PROMPT,
 ): Promise<Uint8Array> {
   const response = await request(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TRYON_MODEL}:generateContent`,
@@ -139,7 +149,7 @@ export async function geminiTryOn(
               ...[person, ...garments].map((uri) => ({
                 inline_data: { mime_type: "image/jpeg", data: uri.slice(23) },
               })),
-              { text: TRYON_PROMPT },
+              { text: prompt },
             ],
           },
         ],
@@ -175,10 +185,11 @@ export async function openAiTryOn(
   person: string,
   garments: string[],
   request: typeof fetch = fetch,
+  prompt = TRYON_PROMPT,
 ): Promise<Uint8Array> {
   const form = new FormData();
   form.set("model", OPENAI_TRYON_MODEL);
-  form.set("prompt", TRYON_PROMPT);
+  form.set("prompt", prompt);
   form.set("size", "auto");
   form.set("quality", "high");
   // Inputs are validated JPEG data URIs from private storage; person first.

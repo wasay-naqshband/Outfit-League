@@ -13,6 +13,7 @@ import {
   FashnProvider,
   geminiTryOn,
   openAiTryOn,
+  outfitPrompt,
 } from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
@@ -30,7 +31,7 @@ import {
   colorAnalysis,
   garmentQuery,
   scoreLookalikes,
-  pickOutfit,
+  styleOutfit,
   rateFit,
   type ClosetItem,
 } from "../_shared/stylist.ts";
@@ -76,7 +77,8 @@ type Job = {
   id: string;
   owner_id: string;
   person_asset_id: string;
-  garment_asset_id: string;
+  garment_asset_id: string | null;
+  outfit: string | null;
   extra_garments: string[];
   garment_parts: string[];
   result_asset_id: string | null;
@@ -171,13 +173,19 @@ async function storeResult(job: Job, bytes: Uint8Array) {
 async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
   try {
     const inputs = await Promise.all(
-      [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
-        (id) => readInput(id, job.owner_id),
-      ),
+      [job.person_asset_id, job.garment_asset_id, ...job.extra_garments]
+        .filter((id): id is string => !!id)
+        .map((id) => readInput(id, job.owner_id)),
     );
     const [person, ...garments] = inputs;
     const bytes = await normalizeResult(
-      await editors[name](providerKey(name), person!, garments),
+      await editors[name](
+        providerKey(name),
+        person!,
+        garments,
+        fetch,
+        job.outfit ? outfitPrompt(job.outfit) : undefined,
+      ),
     );
     validateJpeg(bytes);
     await storeResult(job, bytes);
@@ -214,7 +222,7 @@ async function submitJob(job: Job) {
   try {
     // FASHN wears one piece; "start" refuses extra pieces for it.
     const [person, garment] = await Promise.all(
-      [job.person_asset_id, job.garment_asset_id].map((id) =>
+      [job.person_asset_id, job.garment_asset_id!].map((id) =>
         readInput(id, job.owner_id),
       ),
     );
@@ -413,6 +421,8 @@ async function makeSpin(job: Job, spin: Spin) {
 async function findLookalikes(job: Job): Promise<Lookalike[]> {
   const gemini = env("GEMINI_API_KEY"),
     serper = env("SERPER_API_KEY");
+  // Styled outfits have no clothing photo to search with.
+  if (!job.garment_asset_id) throw new Error("NOT_FOUND");
   const garment = await readInput(job.garment_asset_id, job.owner_id);
   const asset: Asset = required(
     await db
@@ -652,10 +662,18 @@ Deno.serve(async (req) => {
       if (!enabled()) throw new Error("PROVIDER_NOT_CONFIGURED");
       const extra = body.extra ?? [],
         parts = body.parts ?? [];
+      // A styled outfit arrives as text instead of a clothing photo.
+      const outfit =
+        typeof body.outfit === "string" ? body.outfit.trim() : null;
       if (
         !uuid(body.key) ||
         !uuid(body.person) ||
-        !uuid(body.garment) ||
+        (outfit
+          ? body.garment != null ||
+            outfit.length < 10 ||
+            outfit.length > 2000 ||
+            providerName === "FASHN"
+          : !uuid(body.garment)) ||
         body.consent !== CONSENT_VERSION ||
         !Array.isArray(extra) ||
         extra.length > 2 ||
@@ -670,10 +688,11 @@ Deno.serve(async (req) => {
         p_owner: owner,
         p_key: body.key,
         p_person: body.person,
-        p_garment: body.garment,
+        p_garment: outfit ? null : body.garment,
         p_consent: body.consent,
         p_extra: extra,
         p_parts: parts,
+        p_outfit: outfit,
       });
       if (reserved.created) await submitJob(reserved.job);
       return reply(await resultView(await ownedJob(reserved.job.id, owner)));
@@ -733,6 +752,33 @@ Deno.serve(async (req) => {
         );
       }
       return reply({ url });
+    }
+    if (body.action === "shop-piece" || body.action === "piece-link") {
+      const serper = env("SERPER_API_KEY");
+      if (!serper) throw new Error("LOOKALIKES_UNAVAILABLE");
+      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 60 });
+      if (body.action === "piece-link") {
+        const item = body.item as Record<string, unknown> | null;
+        const url = typeof item?.url === "string" ? item.url : "";
+        if (!url.startsWith("https://") || url.length > 2048)
+          throw new Error("INVALID_REQUEST");
+        return reply({
+          url: await storeLink(serper, {
+            title: String(item!.title ?? "").slice(0, 120),
+            store: String(item!.store ?? "").slice(0, 60),
+            price: null,
+            url,
+            image: url,
+          }).catch(() => url),
+        });
+      }
+      const query = typeof body.query === "string" ? body.query.trim() : "";
+      if (!query || query.length > 100) throw new Error("INVALID_REQUEST");
+      return reply({
+        items: rank(
+          await shopping(serper, query).catch(() => [] as Lookalike[]),
+        ).slice(0, 4),
+      });
     }
     if (body.action === "link") {
       if (!(await hasPro(owner))) throw new Error("PRO_REQUIRED");
@@ -795,25 +841,32 @@ Deno.serve(async (req) => {
       }
       const occasion =
         typeof body.occasion === "string" ? body.occasion.trim() : "";
+      const styles = (Array.isArray(body.styles) ? body.styles : [])
+        .filter((x): x is string => typeof x === "string" && x.length <= 24)
+        .slice(0, 6);
       if (!occasion || occasion.length > 300)
         throw new Error("INVALID_REQUEST");
-      await rpc("battle_rate", { p_key: "stylist:" + owner, p_max: 40 });
-      const closet: ClosetItem[] = required(
-        await db
-          .from("library_items")
-          .select("id,name,category,color,brand,tags")
-          .eq("owner_id", owner)
-          .eq("kind", "wardrobe")
-          .order("created_at", { ascending: false })
-          .limit(150),
-      );
+      // The written outfit is free; Pro just gets a higher limit.
+      // ponytail: hourly limit via battle_rate; a daily cap needs its own counter.
+      await rpc("battle_rate", {
+        p_key: "outfit:" + owner,
+        p_max: (await hasPro(owner)) ? 30 : 5,
+      });
+      let closet: ClosetItem[] | null = null;
+      if (body.closet === true) {
+        closet = required(
+          await db
+            .from("library_items")
+            .select("id,name,category,color,brand,tags")
+            .eq("owner_id", owner)
+            .eq("kind", "wardrobe")
+            .order("created_at", { ascending: false })
+            .limit(150),
+        );
+        if (!closet.length) return reply({ outfit: null, emptyCloset: true });
+      }
       return reply({
-        outfit: await pickOutfit(
-          key,
-          occasion,
-          closet,
-          profile.color_profile?.season ?? null,
-        ),
+        outfit: await styleOutfit(key, occasion, styles, closet),
       });
     }
     if (body.action === "delete") {

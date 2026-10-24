@@ -352,7 +352,7 @@ export default function LiveResult({ id }: { id: string }) {
                   }}
                 />
               )}
-              <Lookalikes id={id} />
+              {!view.job.outfit && <Lookalikes id={id} />}
               <Button
                 secondary
                 title="Your private look history"

@@ -11,6 +11,8 @@ export type TryOnJob = {
   garment_asset_id: string;
   result_asset_id: string | null;
   rating?: import("../lib/tryon-api").Rating | null;
+  /** Set for AI Stylist photos: the outfit was described, not photographed. */
+  outfit?: string | null;
 };
 export type JobView = {
   job: TryOnJob;
