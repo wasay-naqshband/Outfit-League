@@ -62,6 +62,7 @@ export const errorMessages: Record<string, string> = {
     "Importing store links is included with Pro. Your photo imports still work on Free.",
   LINK_NO_IMAGE:
     "We couldn’t find a clothing photo on that page. Screenshot the item and choose the photo instead.",
+  LOOKALIKES_FAILED: "Lookalikes couldn’t load. Please try again.",
   STYLIST_FAILED: "The stylist couldn’t answer just now. Please try again.",
   NO_SAVED_PHOTO: "Add your try-on photo first, then we can find your colours.",
   ACTIVE_JOB:

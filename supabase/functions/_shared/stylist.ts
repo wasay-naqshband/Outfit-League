@@ -203,3 +203,25 @@ export async function pickOutfit(
     tips: lines(out.tips, 3),
   };
 }
+
+// Cheaper lookalikes, step 1: a short shopping query for the garment photo.
+export async function garmentQuery(
+  key: string,
+  garment: string,
+  request: typeof fetch = fetch,
+) {
+  const out = await ask(
+    key,
+    [
+      photo(garment),
+      {
+        text: "This photo shows a clothing item, possibly worn by someone. Describe only the main garment as a short online shopping search query (4 to 8 words: gender if obvious, colour, material or knit, style, type), e.g. 'men's grey cream colour block zip knit cardigan'. No brand names unless clearly printed.",
+      },
+    ],
+    { type: "OBJECT", properties: { query: str }, required: ["query"] },
+    request,
+  );
+  const query = line(out.query, 100);
+  if (!query) throw new Error("STYLIST_FAILED");
+  return query;
+}

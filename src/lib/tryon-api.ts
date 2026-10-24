@@ -91,11 +91,27 @@ export async function saveLook(id: string, saved: boolean) {
   if (saved) analytics.track("look_saved", { source: "ai" }, `look:${id}`);
 }
 // Product photo from a store link (Zara, H&M, Shein…), as a private JPEG.
-export async function imageFromLink(url: string): Promise<LocalPhoto> {
-  const photo = await callTryOn<{ type: string; data: string }>({
-    action: "link",
-    url,
+export const imageFromLink = (url: string) =>
+  photoFromServer({ action: "link", url });
+// A lookalike's product photo, ready to try on.
+export const lookalikePhoto = (id: string, index: number) =>
+  photoFromServer({ action: "lookalike-image", id, index });
+export type Lookalike = {
+  title: string;
+  store: string;
+  price: number;
+  url: string;
+  image: string;
+};
+export const fetchLookalikes = (id: string) =>
+  callTryOn<{ items: Lookalike[]; locked: number }>({
+    action: "lookalikes",
+    id,
   });
+async function photoFromServer(
+  body: Record<string, unknown>,
+): Promise<LocalPhoto> {
+  const photo = await callTryOn<{ type: string; data: string }>(body);
   if (Platform.OS === "web")
     return preparePhoto(`data:${photo.type};base64,${photo.data}`);
   const file = `${FileSystem.cacheDirectory}link-${randomUUID()}`;

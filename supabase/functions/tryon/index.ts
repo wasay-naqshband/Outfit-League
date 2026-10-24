@@ -18,8 +18,10 @@ import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 import { linkImage } from "../_shared/link-image.ts";
+import { searchLookalikes, type Lookalike } from "../_shared/lookalikes.ts";
 import {
   colorAnalysis,
+  garmentQuery,
   pickOutfit,
   rateFit,
   type ClosetItem,
@@ -71,6 +73,7 @@ type Job = {
   garment_parts: string[];
   result_asset_id: string | null;
   rating: unknown;
+  lookalikes: Lookalike[] | null;
   status: string;
   provider_id: string | null;
   expires_at: string;
@@ -313,8 +316,9 @@ async function resultView(job: Job) {
       .eq("job_id", job.id)
       .maybeSingle(),
   );
+  // Lookalikes go out only through their own action, which applies Free vs Pro.
   return {
-    job,
+    job: { ...job, lookalikes: undefined },
     beforeUrl: signed.person ?? null,
     afterUrl: signed.result ?? null,
     look,
@@ -395,6 +399,18 @@ async function makeSpin(job: Job, spin: Spin) {
     );
   }
 }
+async function hasPro(owner: string) {
+  const subscription = checked(
+    await db
+      .from("user_subscriptions")
+      .select("active,expires_at")
+      .eq("owner_id", owner)
+      .maybeSingle(),
+  ) as { active: boolean; expires_at: string } | null;
+  return (
+    !!subscription?.active && Date.parse(subscription.expires_at) > Date.now()
+  );
+}
 function cors(req: Request) {
   const origin = req.headers.get("origin");
   const allowed = env("ALLOWED_ORIGINS").split(",").filter(Boolean);
@@ -425,6 +441,8 @@ const exposed = new Set([
   "LINK_NO_IMAGE",
   "PRO_REQUIRED",
   "STYLIST_FAILED",
+  "LOOKALIKES_UNAVAILABLE",
+  "LOOKALIKES_FAILED",
   "NO_SAVED_PHOTO",
 ]);
 Deno.serve(async (req) => {
@@ -624,19 +642,48 @@ Deno.serve(async (req) => {
       if (reserved.created) EdgeRuntime.waitUntil(makeSpin(job, reserved.spin));
       return reply(await resultView(job));
     }
+    if (body.action === "lookalikes" || body.action === "lookalike-image") {
+      if (!env("SERPER_API_KEY") || !env("GEMINI_API_KEY"))
+        throw new Error("LOOKALIKES_UNAVAILABLE");
+      const job = await ownedJob(body.id, owner);
+      if (job.status !== "completed") throw new Error("NOT_FOUND");
+      let items = job.lookalikes;
+      if (!items) {
+        await rpc("battle_rate", { p_key: "lookalike:" + owner, p_max: 30 });
+        const query = await garmentQuery(
+          env("GEMINI_API_KEY"),
+          await readInput(job.garment_asset_id, owner),
+        );
+        // ponytail: ranked by price only; add an AI look-alike score if
+        // results drift from the original garment.
+        items = await searchLookalikes(env("SERPER_API_KEY"), query);
+        checked(
+          await db
+            .from("try_on_jobs")
+            .update({ lookalikes: items })
+            .eq("id", job.id),
+        );
+      }
+      // Free shows the two cheapest; Pro sees them all.
+      const shown = (await hasPro(owner)) ? items.length : 2;
+      if (body.action === "lookalikes")
+        return reply({
+          items: items.slice(0, shown),
+          locked: Math.max(0, items.length - shown),
+        });
+      const item = items.slice(0, shown)[Number(body.index)];
+      if (!item) throw new Error("NOT_FOUND");
+      await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
+      // The store page's product photo is sharper than the shopping thumbnail.
+      const photo = await linkImage(item.url)
+        .catch(() => linkImage(item.image))
+        .catch(() => {
+          throw new Error("LINK_NO_IMAGE");
+        });
+      return reply({ type: photo.type, data: toBase64(photo.data) });
+    }
     if (body.action === "link") {
-      const subscription = checked(
-        await db
-          .from("user_subscriptions")
-          .select("active,expires_at")
-          .eq("owner_id", owner)
-          .maybeSingle(),
-      ) as { active: boolean; expires_at: string } | null;
-      if (
-        !subscription?.active ||
-        Date.parse(subscription.expires_at) <= Date.now()
-      )
-        throw new Error("PRO_REQUIRED");
+      if (!(await hasPro(owner))) throw new Error("PRO_REQUIRED");
       await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
       const photo = await linkImage(body.url).catch((error) => {
         throw new Error(
