@@ -22,6 +22,7 @@ import {
   lens,
   rank,
   shopping,
+  storeLink,
   thumbnail,
   type Lookalike,
 } from "../_shared/lookalikes.ts";
@@ -693,7 +694,8 @@ Deno.serve(async (req) => {
       if (reserved.created) EdgeRuntime.waitUntil(makeSpin(job, reserved.spin));
       return reply(await resultView(job));
     }
-    if (body.action === "lookalikes" || body.action === "lookalike-image") {
+    if (body.action === "lookalikes" || body.action === "lookalike-link") {
+      const serper = env("SERPER_API_KEY");
       if (!env("SERPER_API_KEY") || !env("GEMINI_API_KEY"))
         throw new Error("LOOKALIKES_UNAVAILABLE");
       const job = await ownedJob(body.id, owner);
@@ -716,21 +718,21 @@ Deno.serve(async (req) => {
           items: items.slice(0, shown),
           locked: Math.max(0, items.length - shown),
         });
-      const item = items.slice(0, shown)[Number(body.index)];
+      const index = Number(body.index);
+      const item = items.slice(0, shown)[index];
       if (!item) throw new Error("NOT_FOUND");
-      await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
-      // The store page's product photo is sharper than the shopping thumbnail.
-      const photo = await (
-        item.photo
-          ? linkImage(item.photo)
-          : Promise.reject(new Error("LINK_NO_IMAGE"))
-      )
-        .catch(() => linkImage(item.url))
-        .catch(() => linkImage(item.image))
-        .catch(() => {
-          throw new Error("LINK_NO_IMAGE");
-        });
-      return reply({ type: photo.type, data: toBase64(photo.data) });
+      await rpc("battle_rate", { p_key: "link:" + owner, p_max: 60 });
+      const url = await storeLink(serper, item).catch(() => item.url);
+      if (url !== item.url) {
+        items[index] = { ...item, url };
+        checked(
+          await db
+            .from("try_on_jobs")
+            .update({ lookalikes: items })
+            .eq("id", job.id),
+        );
+      }
+      return reply({ url });
     }
     if (body.action === "link") {
       if (!(await hasPro(owner))) throw new Error("PRO_REQUIRED");

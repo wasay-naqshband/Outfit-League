@@ -596,7 +596,7 @@ export default function Onboarding() {
     if (told.length < 3) told.unshift("Looks different every time");
     const lines = [
       `Matching fits to ${styles || "your style"}`,
-      "Finding cheaper lookalikes",
+      "Finding similar lookalikes",
       "Setting up your AI try-ons",
     ];
     // ponytail: quarter-step ring from borders; use react-native-svg for a smooth arc.

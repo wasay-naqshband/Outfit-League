@@ -121,3 +121,38 @@ test("rank: tops up with similar styles when there are few close matches; unpric
     ["Shein", "Walmart", "Target"],
   );
 });
+
+test("buy: a Google Shopping link becomes the store's own product page", async () => {
+  const { storeLink } =
+    await import("../supabase/functions/_shared/lookalikes.ts");
+  const item = {
+    title: "Relaxed-Fit Polo Sweater",
+    store: "H&M",
+    price: 49.99,
+    url: "https://www.google.com/search?ibp=oshop&q=x",
+    image: "https://img.com/a.jpg",
+  };
+  const results = (links: string[]) =>
+    (async () =>
+      Response.json({
+        organic: links.map((link) => ({ link })),
+      })) as unknown as typeof fetch;
+  assert.equal(
+    await storeLink(
+      "k",
+      item,
+      results([
+        "https://poshmark.com/listing/HM-Relaxed-Polo", // name inside another domain
+        "https://www2.hm.com/en_us/search-results.html", // H&M, but a search page
+        "https://www2.hm.com/en_us/productpage.1368430001.html",
+      ]),
+    ),
+    "https://www2.hm.com/en_us/productpage.1368430001.html",
+  );
+  assert.equal(
+    await storeLink("k", item, results(["https://www.walmart.com/browse/x"])),
+    item.url, // nothing on the store's own site: keep the Google link
+  );
+  const direct = { ...item, url: "https://us.shein.com/p-1.html" };
+  assert.equal(await storeLink("k", direct, results([])), direct.url);
+});

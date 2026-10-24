@@ -7,8 +7,6 @@ export type Lookalike = {
   price: number | null; // USD; null when only the store page shows it
   url: string;
   image: string;
-  /** Full-size product photo for "Try it on", when the source gives one. */
-  photo?: string;
   score?: number; // 0–10 look-alike score from the AI
 };
 
@@ -33,7 +31,7 @@ export const usd = (value: unknown) => {
 
 async function serper(
   key: string,
-  kind: "shopping" | "lens",
+  kind: "shopping" | "lens" | "search",
   body: Record<string, unknown>,
   request: typeof fetch,
 ) {
@@ -118,7 +116,6 @@ export async function lens(
       price: null as number | null,
       url: https(item.link),
       image: https(item.thumbnailUrl) ?? https(item.imageUrl),
-      photo: https(item.imageUrl) as string | undefined,
     }))
     .filter(
       (item) =>
@@ -186,4 +183,42 @@ export function rank(items: Lookalike[]): Lookalike[] {
     ...(close.length < 3 ? similar.slice(0, 3 - close.length) : []),
   ];
   return closest ? [closest, ...rest.sort(cheaper)].slice(0, 6) : [];
+}
+
+// Google Shopping links open Google, not the store. Find the store's own
+// product page with one web search (done when "Buy" is tapped, then saved).
+export async function storeLink(
+  key: string,
+  item: Lookalike,
+  request: typeof fetch = fetch,
+): Promise<string> {
+  if (!/(^|\.)google\./.test(new URL(item.url).hostname)) return item.url;
+  const data = await serper(
+    key,
+    "search",
+    { q: item.title + " " + item.store, num: 10 },
+    request,
+  );
+  // "Walmart - Zpanxa" → "walmart", "H&M" → "hm", "shein.com" → "shein".
+  const name = storeKey(item.store.split(/ - |\(/)[0]!).replace(
+    /[^a-z0-9]/g,
+    "",
+  );
+  // The store's own domain (www2.hm.com → "hm"), on a product page, not a
+  // category, search or listing page.
+  const domain = (link: string) =>
+    new URL(link).hostname.toLowerCase().split(".").slice(-2)[0]!;
+  const listing =
+    /\/(browse|brand|b|search[\w-]*|s|c|category|categories|collections?|shop|catalog|deals)(\/|$|\?|\.)/i;
+  const links = ((data?.organic ?? []) as { link?: unknown }[])
+    .map((result) => https(result.link))
+    .filter((link): link is string => !!link);
+  return (
+    links.find(
+      (link) =>
+        name.length > 1 &&
+        domain(link).replace(/[^a-z0-9]/g, "") === name &&
+        !listing.test(new URL(link).pathname),
+    ) ?? item.url
+  );
 }

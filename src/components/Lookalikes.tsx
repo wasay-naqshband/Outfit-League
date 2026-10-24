@@ -5,8 +5,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, Heading, Icon } from "./ui";
 import { CookingLoader, LOOKALIKE_MESSAGES } from "./CookingLoader";
-import { fetchLookalikes, lookalikePhoto } from "../lib/tryon-api";
-import { useTryOnDraft } from "../lib/tryon-draft";
+import { fetchLookalikes, lookalikeLink } from "../lib/tryon-api";
 import { friendlyError } from "../types/tryon";
 import { colors, fonts, shadow } from "../theme";
 
@@ -15,20 +14,21 @@ const money = (price: number | null) =>
     ? "See price"
     : "$" + (Number.isInteger(price) ? price : price.toFixed(2));
 
-// "Cheaper lookalikes": similar items from US stores, cheapest first.
-// Free sees two; Pro sees them all. Links go straight to the store for now.
+// "Similar lookalikes": similar items from US stores, found only when asked.
+// Free sees two; Pro sees them all. Buy opens the store's own product page.
 export function Lookalikes({ id }: { id: string }) {
-  const draft = useTryOnDraft();
-  const [trying, setTrying] = useState(-1);
+  const [asked, setAsked] = useState(false);
+  const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
   const query = useQuery({
     queryKey: ["lookalikes", id],
     queryFn: () => fetchLookalikes(id),
+    enabled: asked,
     staleTime: Infinity,
     retry: false,
   });
-  // Not set up yet, or nothing found: leave the result screen as it was.
-  if (query.isError || (query.data && !query.data.items.length)) return null;
+  // Lookalike search isn't set up on this server: hide the section.
+  if (query.error?.message === "LOOKALIKES_UNAVAILABLE") return null;
 
   const items = query.data?.items ?? [];
   const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
@@ -38,27 +38,44 @@ export function Lookalikes({ id }: { id: string }) {
       : items[i]!.price === cheapest
         ? "Cheapest"
         : null;
-  async function tryOn(index: number) {
-    if (trying >= 0) return;
-    setTrying(index);
+  async function buy(index: number) {
+    if (opening >= 0) return;
+    setOpening(index);
     setError("");
     try {
-      draft.setGarment(await lookalikePhoto(id, index));
-      router.push("/(tabs)/try-on");
+      const { url } = await lookalikeLink(id, index);
+      await Linking.openURL(url);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
-      setTrying(-1);
+      setOpening(-1);
     }
   }
 
   return (
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Heading size={22}>Cheaper lookalikes</Heading>
-        <Text style={{ fontSize: 20 }}>💸</Text>
+        <Heading size={22}>Similar lookalikes</Heading>
+        <Text style={{ fontSize: 20 }}>🛍️</Text>
       </View>
-      {query.isPending ? (
+      {!asked ? (
+        <Button
+          secondary
+          icon="search"
+          title="Find similar lookalikes"
+          onPress={() => setAsked(true)}
+        />
+      ) : query.isError ? (
+        <Button
+          secondary
+          title="Couldn’t load lookalikes · Try again"
+          onPress={() => void query.refetch()}
+        />
+      ) : query.data && !query.data.items.length ? (
+        <Body style={{ fontSize: 14 }}>
+          No close lookalikes found for this item yet.
+        </Body>
+      ) : query.isPending ? (
         // Same animated wait as the try-on, sized to sit inside the result.
         <CookingLoader
           messages={LOOKALIKE_MESSAGES}
@@ -135,17 +152,11 @@ export function Lookalikes({ id }: { id: string }) {
                 {item.store}
               </Text>
               <Button
-                icon="sparkles"
-                title={trying === i ? "Getting it…" : "Try it on"}
-                disabled={trying >= 0}
+                title={opening === i ? "Opening…" : "Buy"}
+                icon="shopping-bag"
+                disabled={opening >= 0}
                 style={{ minHeight: 42, borderRadius: 14 }}
-                onPress={() => void tryOn(i)}
-              />
-              <Button
-                secondary
-                title="Buy"
-                style={{ minHeight: 40, borderRadius: 14 }}
-                onPress={() => void Linking.openURL(item.url)}
+                onPress={() => void buy(i)}
               />
             </View>
           ))}

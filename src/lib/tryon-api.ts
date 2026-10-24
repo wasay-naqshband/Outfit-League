@@ -93,9 +93,9 @@ export async function saveLook(id: string, saved: boolean) {
 // Product photo from a store link (Zara, H&M, Shein…), as a private JPEG.
 export const imageFromLink = (url: string) =>
   photoFromServer({ action: "link", url });
-// A lookalike's product photo, ready to try on.
-export const lookalikePhoto = (id: string, index: number) =>
-  photoFromServer({ action: "lookalike-image", id, index });
+// The store's own product page for a lookalike (not Google's).
+export const lookalikeLink = (id: string, index: number) =>
+  callTryOn<{ url: string }>({ action: "lookalike-link", id, index });
 export type Lookalike = {
   title: string;
   store: string;
