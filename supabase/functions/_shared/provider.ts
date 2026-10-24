@@ -107,6 +107,9 @@ export class FashnProvider implements TryOnProvider {
 export const GEMINI_TRYON_MODEL = "gemini-3-pro-image";
 const TRYON_PROMPT =
   "Virtual try-on. The first image is a real photo of a person. The following image(s) show clothing items. " +
+  "A clothing photo may show the item worn by someone else: take only the one main garment from it. " +
+  "Never copy anything else from that photo: no T-shirt or shirt underneath, no necklace, jewellery, bag, strap, belt or other accessory. " +
+  "Whatever shows under or around the new garment (neckline, layers, skin) comes from the first image. " +
   "Edit the first image so the person wears the clothing item(s), replacing only the garment each item would cover. " +
   "Reproduce each item exactly: colour, fabric, texture, collar, pockets, stitching, logos, and the same fastenings " +
   "(buttons, snaps or zips only where the item has them). Fit and drape it naturally on their body and pose. " +
@@ -162,4 +165,43 @@ export async function geminiTryOn(
   if (!image || (image.data as string).length > MAX_IMAGE_BYTES * 1.4)
     throw new Error("GENERATION_FAILED");
   return Uint8Array.from(atob(image.data as string), (c) => c.charCodeAt(0));
+}
+
+// OpenAI image editing, the same in-place try-on (~20 s at 1024x1536).
+// No retries: a repeat costs twice.
+export const OPENAI_TRYON_MODEL = "gpt-image-2.5-flare";
+export async function openAiTryOn(
+  key: string,
+  person: string,
+  garments: string[],
+  request: typeof fetch = fetch,
+): Promise<Uint8Array> {
+  const form = new FormData();
+  form.set("model", OPENAI_TRYON_MODEL);
+  form.set("prompt", TRYON_PROMPT);
+  form.set("size", "auto");
+  form.set("quality", "high");
+  // Inputs are validated JPEG data URIs from private storage; person first.
+  [person, ...garments].forEach((uri, i) =>
+    form.append(
+      "image[]",
+      new Blob([Uint8Array.from(atob(uri.slice(23)), (c) => c.charCodeAt(0))], {
+        type: "image/jpeg",
+      }),
+      i ? `garment-${i}.jpg` : "person.jpg",
+    ),
+  );
+  const data = await responseJson(
+    await request("https://api.openai.com/v1/images/edits", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + key },
+      signal: AbortSignal.timeout(120000),
+      body: form,
+    }),
+  );
+  const image = (data.data as { b64_json?: unknown }[] | undefined)?.[0]
+    ?.b64_json;
+  if (typeof image !== "string" || image.length > MAX_IMAGE_BYTES * 1.4)
+    throw new Error("GENERATION_FAILED");
+  return Uint8Array.from(atob(image), (c) => c.charCodeAt(0));
 }

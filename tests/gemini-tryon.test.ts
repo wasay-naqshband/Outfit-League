@@ -90,3 +90,25 @@ test("360° view: studio still first, then a 1080p spin that starts and ends on 
   assert.deepEqual(video, mp4);
   assert.equal(seen.length, 2);
 });
+
+test("OpenAI try-on sends the person first, then the garment, to the Flare edit endpoint", async () => {
+  const { openAiTryOn } =
+    await import("../supabase/functions/_shared/provider.ts");
+  const jpeg = new Uint8Array(await readFile("tests/fixtures/sample.jpg"));
+  const photo = "data:image/jpeg;base64," + toBase64(jpeg);
+  const image = await openAiTryOn("k", photo, [photo], (async (
+    url: string,
+    options: RequestInit,
+  ) => {
+    assert.equal(url, "https://api.openai.com/v1/images/edits");
+    const form = options.body as FormData;
+    assert.equal(form.get("model"), "gpt-image-2.5-flare");
+    const images = form.getAll("image[]") as File[];
+    assert.deepEqual(
+      images.map((f) => f.name),
+      ["person.jpg", "garment-1.jpg"],
+    );
+    return Response.json({ data: [{ b64_json: toBase64(jpeg) }] });
+  }) as typeof fetch);
+  assert.deepEqual(image, jpeg);
+});

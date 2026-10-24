@@ -9,7 +9,11 @@ import {
   validateJpeg,
   readRequestJson,
 } from "../_shared/domain.ts";
-import { FashnProvider, geminiTryOn } from "../_shared/provider.ts";
+import {
+  FashnProvider,
+  geminiTryOn,
+  openAiTryOn,
+} from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
@@ -26,12 +30,25 @@ const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const bucket = db.storage.from("tryon-private");
-const providerName = env("TRYON_PROVIDER") === "fashn" ? "FASHN" : "Gemini";
+const providerName =
+  env("TRYON_PROVIDER") === "openai"
+    ? "OpenAI"
+    : env("TRYON_PROVIDER") === "fashn"
+      ? "FASHN"
+      : "Gemini";
+// One synchronous image edit; FASHN is the only polled provider.
+const editors = { Gemini: geminiTryOn, OpenAI: openAiTryOn };
 const providers = {
   FASHN: new FashnProvider(env("FASHN_API_KEY")),
 };
 const providerKey = (name: string) =>
-  env(name === "Gemini" ? "GEMINI_API_KEY" : "FASHN_API_KEY");
+  env(
+    name === "Gemini"
+      ? "GEMINI_API_KEY"
+      : name === "OpenAI"
+        ? "OPENAI_API_KEY"
+        : "FASHN_API_KEY",
+  );
 const spinEnabled = () => !!env("GEMINI_API_KEY");
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 type Spin = {
@@ -138,9 +155,9 @@ async function storeResult(job: Job, bytes: Uint8Array) {
   );
   await rpc("finish_tryon", { p_job: job.id, p_result: job.id });
 }
-// Gemini answers in one long call, so it runs after the request returns; the
-// app keeps polling "status". A dead worker is refunded when the job expires.
-async function runGemini(job: Job) {
+// Image editors answer in one long call, so it runs after the request returns;
+// the app keeps polling "status". A dead worker is refunded when the job expires.
+async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
   try {
     const inputs = await Promise.all(
       [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
@@ -149,13 +166,13 @@ async function runGemini(job: Job) {
     );
     const [person, ...garments] = inputs;
     const bytes = await normalizeResult(
-      await geminiTryOn(providerKey("Gemini"), person!, garments),
+      await editors[name](providerKey(name), person!, garments),
     );
     validateJpeg(bytes);
     await storeResult(job, bytes);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    console.error("gemini try-on failed", job.id, reason);
+    console.error(name, "try-on failed", job.id, reason);
     const code =
       reason === "PROVIDER_UNAVAILABLE"
         ? "SUBMISSION_FAILED"
@@ -175,12 +192,12 @@ async function submitJob(job: Job) {
   if (!enabled()) return; // Remains pending; worker resumes when explicitly enabled.
   const claimed = await rpc("claim_tryon", { p_job: job.id });
   if (!claimed) return;
-  if (providerName === "Gemini") {
+  if (providerName !== "FASHN") {
     await rpc("attach_prediction", {
       p_job: job.id,
-      p_prediction: "gemini:" + job.id,
+      p_prediction: providerName.toLowerCase() + ":" + job.id,
     });
-    EdgeRuntime.waitUntil(runGemini(job));
+    EdgeRuntime.waitUntil(runEdit(job, providerName));
     return;
   }
   try {
@@ -217,7 +234,7 @@ async function syncJob(job: Job) {
     await submitJob(job);
     return;
   }
-  if (!job.provider_id || job.provider_id.startsWith("gemini:")) return;
+  if (!job.provider_id || /^(gemini|openai):/.test(job.provider_id)) return;
   if (!providerKey("FASHN")) return;
   let prediction;
   try {
