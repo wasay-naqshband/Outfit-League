@@ -38,6 +38,8 @@ export default function LiveResult({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [imageError, setImageError] = useState(false);
+  // The photo's own shape, so it fills the width with no side bars.
+  const [ratio, setRatio] = useState(2 / 3);
   const view = query.data;
   const uri = segment === "Before" ? view?.beforeUrl : view?.afterUrl;
   const spin = view?.spin;
@@ -230,15 +232,21 @@ export default function LiveResult({ id }: { id: string }) {
             </>
           ) : (
             <>
-              <View style={{ height: 359, borderRadius: 32, ...shadow() }}>
-                <LinearGradient
-                  colors={gradients.lavender}
+              <View
+                style={{
+                  marginHorizontal: -12,
+                  aspectRatio: ratio,
+                  maxHeight: 640,
+                  borderRadius: 28,
+                  ...shadow(),
+                }}
+              >
+                <View
                   style={{
                     flex: 1,
-                    borderRadius: 32,
-                    borderWidth: 4,
-                    borderColor: colors.white,
+                    borderRadius: 28,
                     overflow: "hidden",
+                    backgroundColor: colors.white,
                   }}
                 >
                   {uri && !imageError && (
@@ -253,6 +261,11 @@ export default function LiveResult({ id }: { id: string }) {
                           : "AI-generated style preview"
                       }
                       onError={() => setImageError(true)}
+                      onLoad={(e) =>
+                        e.source.width &&
+                        e.source.height &&
+                        setRatio(e.source.width / e.source.height)
+                      }
                     />
                   )}
                   <View
@@ -279,7 +292,7 @@ export default function LiveResult({ id }: { id: string }) {
                       Looks good on you
                     </StickerBadge>
                   )}
-                </LinearGradient>
+                </View>
               </View>
               {(imageError || !uri) && (
                 <ErrorState
