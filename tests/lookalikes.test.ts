@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  pieceOptions,
   rank,
   usStorePage,
   shopping,
@@ -155,4 +156,23 @@ test("buy: a Google Shopping link becomes the store's own product page", async (
   );
   const direct = { ...item, url: "https://us.shein.com/p-1.html" };
   assert.equal(await storeLink("k", direct, results([])), direct.url);
+});
+
+test("shop the look: closest first, then cheapest, then next closest, one per store", () => {
+  const item = (store: string, price: number): Lookalike => ({
+    title: store,
+    store,
+    price,
+    url: "https://x.com/" + store,
+    image: "https://x.com/i.jpg",
+  });
+  const got = pieceOptions([
+    item("Nordstrom", 60),
+    item("nordstrom.com", 20),
+    item("H&M", 25),
+    item("Walmart", 12),
+    item("Target", 30),
+  ]).map((i) => i.store);
+  assert.deepEqual(got, ["Nordstrom", "Walmart", "H&M"]);
+  assert.deepEqual(pieceOptions([]), []);
 });

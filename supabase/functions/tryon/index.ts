@@ -21,6 +21,7 @@ import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 import { linkImage } from "../_shared/link-image.ts";
 import {
   lens,
+  pieceOptions,
   rank,
   shopping,
   storeLink,
@@ -783,9 +784,9 @@ Deno.serve(async (req) => {
       const query = typeof body.query === "string" ? body.query.trim() : "";
       if (!query || query.length > 100) throw new Error("INVALID_REQUEST");
       return reply({
-        items: rank(
+        items: pieceOptions(
           await shopping(serper, query).catch(() => [] as Lookalike[]),
-        ).slice(0, 4),
+        ),
       });
     }
     if (body.action === "link") {

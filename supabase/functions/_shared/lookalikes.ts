@@ -185,6 +185,25 @@ export function rank(items: Lookalike[]): Lookalike[] {
   return closest ? [closest, ...rest.sort(cheaper)].slice(0, 6) : [];
 }
 
+// Shop the look, from Google's relevance order (one per store, top 8): the
+// closest result, the cheapest of the rest, then the next closest.
+export function pieceOptions(items: Lookalike[]): Lookalike[] {
+  const seen = new Set<string>();
+  const [best, ...rest] = items
+    .filter(
+      (item) =>
+        !seen.has(storeKey(item.store)) && !!seen.add(storeKey(item.store)),
+    )
+    .slice(0, 8);
+  if (!best) return [];
+  const cheapest = rest.slice().sort(cheaper)[0];
+  return [
+    best,
+    ...rest.filter((item) => item === cheapest),
+    ...rest.filter((item) => item !== cheapest),
+  ].slice(0, 3);
+}
+
 // Google Shopping links open Google, not the store. Find the store's own
 // product page with one web search (done when "Buy" is tapped, then saved).
 export async function storeLink(

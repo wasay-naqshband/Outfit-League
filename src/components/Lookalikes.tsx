@@ -219,7 +219,8 @@ export function ProductCard({
         style={{
           fontFamily: fonts.medium,
           fontSize: 13,
-          minHeight: 34,
+          lineHeight: 17,
+          height: 34,
         }}
       >
         {item.title}

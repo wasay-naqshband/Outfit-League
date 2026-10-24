@@ -22,9 +22,10 @@ export const PART_LABEL: Record<OutfitPiece["part"], string> = {
   accessory: "Extra",
 };
 
-// The best store match for one piece: its real photo, price and Shop.
-function PieceCard({ piece }: { piece: OutfitPiece }) {
-  const [opening, setOpening] = useState(false);
+// One piece: its name, then up to three store options (closest match,
+// cheapest, next closest), each with its real photo, price and Shop.
+function PieceOptions({ piece }: { piece: OutfitPiece }) {
+  const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
   const shop = useQuery({
     queryKey: ["shop-piece", piece.query],
@@ -32,52 +33,81 @@ function PieceCard({ piece }: { piece: OutfitPiece }) {
     staleTime: Infinity,
     retry: false,
   });
-  const item = shop.data?.items[0];
-  if (shop.isPending)
-    return (
-      <View
-        style={{
-          width: 172,
-          height: 330,
-          borderRadius: 22,
-          backgroundColor: colors.white,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          padding: 12,
-          ...shadow(0.06),
-        }}
-      >
-        <ActivityIndicator color={colors.ink} />
-        <Body style={{ fontSize: 13, textAlign: "center" }}>
-          Finding {PART_LABEL[piece.part].toLowerCase()}…
-        </Body>
-      </View>
-    );
-  if (!item) return null;
-  async function open() {
-    if (opening || !item) return;
-    setOpening(true);
+  const items = shop.data?.items ?? [];
+  if (!shop.isPending && !items.length) return null;
+  const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
+  async function open(index: number) {
+    const item = items[index];
+    if (opening >= 0 || !item) return;
+    setOpening(index);
     setError("");
     try {
       await Linking.openURL((await pieceLink(item)).url);
     } catch (e) {
       setError(friendlyError(e));
     } finally {
-      setOpening(false);
+      setOpening(-1);
     }
   }
   return (
-    <View style={{ gap: 6 }}>
-      <ProductCard
-        item={item}
-        badge={PART_LABEL[piece.part]}
-        busy={opening}
-        disabled={opening}
-        label="Shop"
-        onBuy={() => void open()}
-      />
-      {!!error && <Body style={{ fontSize: 12, width: 172 }}>{error}</Body>}
+    <View style={{ gap: 8 }}>
+      <View style={{ gap: 2 }}>
+        <Text
+          style={{
+            fontFamily: fonts.bold,
+            fontSize: 11,
+            letterSpacing: 1,
+            color: colors.text3,
+          }}
+        >
+          {PART_LABEL[piece.part].toUpperCase()}
+        </Text>
+        <Text style={{ fontFamily: fonts.medium, fontSize: 15 }}>
+          {piece.name}
+        </Text>
+      </View>
+      {shop.isPending ? (
+        <View
+          style={{
+            height: 120,
+            borderRadius: 22,
+            backgroundColor: colors.white,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            ...shadow(0.06),
+          }}
+        >
+          <ActivityIndicator color={colors.ink} />
+          <Body style={{ fontSize: 13 }}>Finding it in stores…</Body>
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
+        >
+          {items.map((item, i) => (
+            <ProductCard
+              key={item.url}
+              item={item}
+              badge={
+                i === 0
+                  ? "Best match"
+                  : item.price === cheapest
+                    ? "Cheapest"
+                    : null
+              }
+              busy={opening === i}
+              disabled={opening >= 0}
+              label="Shop"
+              onBuy={() => void open(i)}
+            />
+          ))}
+        </ScrollView>
+      )}
+      {!!error && <Body style={{ fontSize: 12 }}>{error}</Body>}
     </View>
   );
 }
@@ -124,15 +154,11 @@ export function ShopTheLook({
         </Text>
       )}
       {!!toShop.length && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
-        >
+        <View style={{ gap: 20 }}>
           {toShop.map((piece) => (
-            <PieceCard key={piece.part + piece.name} piece={piece} />
+            <PieceOptions key={piece.part + piece.name} piece={piece} />
           ))}
-        </ScrollView>
+        </View>
       )}
       {!!toShop.length && (
         <Button
