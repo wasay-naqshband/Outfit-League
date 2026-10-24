@@ -13,6 +13,12 @@ export type TryOnJob = {
   rating?: import("../lib/tryon-api").Rating | null;
   /** Set for AI Stylist photos: the outfit was described, not photographed. */
   outfit?: string | null;
+  /** AI Stylist: the outfit behind the photo, for Shop the look. */
+  styled?: {
+    title: string;
+    request: string;
+    pieces: import("../lib/tryon-api").OutfitPiece[];
+  } | null;
 };
 export type JobView = {
   job: TryOnJob;

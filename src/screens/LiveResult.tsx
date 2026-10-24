@@ -24,6 +24,7 @@ import { useJob, useWallet } from "../lib/queries";
 import { rateLook, saveLook, startSpin } from "../lib/tryon-api";
 import { RatingCard } from "../components/Stylist";
 import { Lookalikes } from "../components/Lookalikes";
+import { ShopTheLook } from "../components/ShopTheLook";
 import { sharePreview } from "../lib/share-image";
 import { friendlyError } from "../types/tryon";
 import { outOfCredits } from "../lib/credits";
@@ -352,7 +353,11 @@ export default function LiveResult({ id }: { id: string }) {
                   }}
                 />
               )}
-              {!view.job.outfit && <Lookalikes id={id} />}
+              {view.job.styled ? (
+                <ShopTheLook styled={view.job.styled} />
+              ) : (
+                !view.job.outfit && <Lookalikes id={id} />
+              )}
               <Button
                 secondary
                 title="Your private look history"

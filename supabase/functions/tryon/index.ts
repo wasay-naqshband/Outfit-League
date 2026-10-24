@@ -32,6 +32,7 @@ import {
   garmentQuery,
   scoreLookalikes,
   styleOutfit,
+  cleanStyled,
   rateFit,
   type ClosetItem,
 } from "../_shared/stylist.ts";
@@ -694,6 +695,13 @@ Deno.serve(async (req) => {
         p_parts: parts,
         p_outfit: outfit,
       });
+      if (reserved.created && outfit)
+        checked(
+          await db
+            .from("try_on_jobs")
+            .update({ styled: cleanStyled(body.styled) })
+            .eq("id", reserved.job.id),
+        );
       if (reserved.created) await submitJob(reserved.job);
       return reply(await resultView(await ownedJob(reserved.job.id, owner)));
     }

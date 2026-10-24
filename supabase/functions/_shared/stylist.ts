@@ -162,6 +162,30 @@ export const PIECE_PARTS = [
   "shoes",
   "accessory",
 ] as const;
+// Outfit pieces from the model or the app: known parts, bounded strings, and a
+// closet id only when `owned` accepts it.
+export function cleanPieces(value: unknown, owned: (id: string) => boolean) {
+  return (Array.isArray(value) ? value : [])
+    .map((p: Record<string, unknown>) => ({
+      part: PIECE_PARTS.includes(p?.part as (typeof PIECE_PARTS)[number])
+        ? (p.part as (typeof PIECE_PARTS)[number])
+        : "accessory",
+      name: line(p?.name, 90),
+      query: line(p?.query, 90),
+      closetId: owned(String(p?.closetId)) ? String(p.closetId) : null,
+    }))
+    .filter((p) => p.name && p.query)
+    .slice(0, 6);
+}
+// What a styled try-on keeps for its result screen (sent by the app).
+export function cleanStyled(value: unknown) {
+  const v = (value ?? {}) as Record<string, unknown>;
+  const pieces = cleanPieces(v.pieces, (id) => /^[0-9a-f-]{36}$/i.test(id));
+  return pieces.length
+    ? { title: line(v.title, 80), request: line(v.request, 200), pieces }
+    : null;
+}
+
 // AI Stylist: a complete outfit for the occasion, each piece with a shopping
 // query (for Shop the look). With a closet, pieces they own carry its id.
 export async function styleOutfit(
@@ -218,17 +242,7 @@ export async function styleOutfit(
     request,
   );
   const owned = new Set((closet ?? []).map((item) => item.id));
-  const pieces = (Array.isArray(out.pieces) ? out.pieces : [])
-    .map((p: Record<string, unknown>) => ({
-      part: PIECE_PARTS.includes(p.part as (typeof PIECE_PARTS)[number])
-        ? (p.part as (typeof PIECE_PARTS)[number])
-        : "accessory",
-      name: line(p.name, 90),
-      query: line(p.query, 90),
-      closetId: owned.has(String(p.closetId)) ? String(p.closetId) : null,
-    }))
-    .filter((p: { name: string; query: string }) => p.name && p.query)
-    .slice(0, 6);
+  const pieces = cleanPieces(out.pieces, (id) => owned.has(id));
   if (!pieces.length) throw new Error("STYLIST_FAILED");
   return {
     title: line(out.title, 80),

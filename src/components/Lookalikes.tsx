@@ -164,12 +164,14 @@ export function ProductCard({
   busy,
   disabled,
   onBuy,
+  label = "Buy",
 }: {
   item: Lookalike;
   badge?: string | null;
   busy: boolean;
   disabled: boolean;
   onBuy: () => void;
+  label?: string;
 }) {
   return (
     <View
@@ -233,7 +235,7 @@ export function ProductCard({
         {item.store}
       </Text>
       <Button
-        title={busy ? "Opening…" : "Buy"}
+        title={busy ? "Opening…" : label}
         icon="shopping-bag"
         disabled={disabled}
         style={{ minHeight: 42, borderRadius: 14 }}
