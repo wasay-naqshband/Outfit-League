@@ -10,7 +10,7 @@ const STUDIO_PROMPT =
   "Keep the face, facial features, hair, skin tone and body identical, and keep every clothing item and detail identical. " +
   "If the shoes are not visible, add simple shoes that suit the outfit. Photorealistic, sharp.";
 const SPIN_PROMPT =
-  "Fashion turntable. The person stands still in a relaxed neutral pose on a slowly rotating platform and turns one full 360 degrees at constant speed: " +
+  "A 4-second fashion turntable clip. The person stands still in a relaxed neutral pose on a rotating platform and turns exactly one full 360 degrees at constant speed within the 4 seconds: " +
   "facing the camera, then their left side, their back, their right side, and facing the camera again, ending exactly on the final image. " +
   "Locked-off static camera, full body head to toe always in frame, centred. The face, hair, body and every clothing detail stay identical to the images throughout. " +
   "Plain light grey seamless studio background, soft even lighting. No camera movement, no cuts, no talking, no music, silent.";
@@ -67,7 +67,8 @@ async function studioStill(
   return image.data;
 }
 
-// Step 2: a 1080p turntable that starts and ends on that still (~55 s, ~$1).
+// Step 2: a 4 s 720p turntable that starts and ends on that still (~$0.40 at
+// ~$0.10 per second of 720p).
 // No retries: a repeat may cost twice.
 export async function generateSpinVideo(
   key: string,
@@ -90,7 +91,7 @@ export async function generateSpinVideo(
         response_format: {
           type: "video",
           aspect_ratio: "9:16",
-          resolution: "1080p",
+          resolution: "720p",
         },
       }),
     },

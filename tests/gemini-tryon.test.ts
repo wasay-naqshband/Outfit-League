@@ -49,7 +49,7 @@ test("Gemini try-on fails cleanly on refusals and rate limits, without retrying"
   assert.equal(calls, 1);
 });
 
-test("360° view: studio still first, then a 1080p spin that starts and ends on it", async () => {
+test("360° view: studio still first, then a 720p spin that starts and ends on it", async () => {
   const { generateSpinVideo } =
     await import("../supabase/functions/_shared/spin.ts");
   const look = "data:image/jpeg;base64,AAAA";
@@ -71,7 +71,7 @@ test("360° view: studio still first, then a 1080p spin that starts and ends on 
       body.input.slice(0, 2).map((p: { data: string }) => p.data),
       ["STILL", "STILL"],
     );
-    assert.equal(body.response_format.resolution, "1080p");
+    assert.equal(body.response_format.resolution, "720p");
     return Response.json({
       steps: [
         {
