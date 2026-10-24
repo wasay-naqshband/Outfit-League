@@ -31,6 +31,7 @@ import {
   useWallet,
 } from "../../src/lib/queries";
 import { pickPhoto, preparePhoto } from "../../src/lib/photos";
+import { saveSavedPhoto } from "../../src/lib/saved-photo";
 import {
   callTryOn,
   fetchWallet,
@@ -151,6 +152,16 @@ export default function TryOn() {
     if (!draft.person && saved.data && !removed.current)
       draft.setPerson(saved.data);
   }, [saved.data, draft.person]);
+  // A photo added before signing in (e.g. during onboarding) becomes the
+  // account's default try-on photo once there's an account and no default yet.
+  useEffect(() => {
+    const owner = session?.user.id;
+    const photo = draft.person;
+    if (!owner || !photo || !saved.isSuccess || saved.data) return;
+    void saveSavedPhoto(owner, photo)
+      .then(() => queryClient.setQueryData(["saved-photo", owner], photo))
+      .catch(() => {});
+  }, [session?.user.id, saved.isSuccess, saved.data, draft.person]);
   // The person photo can change from the My photo screen; drop an upload made
   // for the previous one so it is never reused.
   useEffect(() => {
