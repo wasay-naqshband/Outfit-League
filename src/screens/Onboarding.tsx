@@ -27,6 +27,7 @@ import {
 import { colors, fonts, gradients, shadow } from "../theme";
 import { STYLE_OPTIONS, styleLabel, useOnboarding } from "../lib/onboarding";
 import { disposePhoto, pickPhoto } from "../lib/photos";
+import { PhotoGuide } from "../components/PhotoGuide";
 import { saveSavedPhoto } from "../lib/saved-photo";
 import { useTryOnDraft } from "../lib/tryon-draft";
 import { useApp } from "../lib/state";
@@ -373,71 +374,77 @@ export default function Onboarding() {
               ? "Can you see your entire body clearly? If anything is cut off or blurry, choose another photo."
               : "Take a moment to get this right. A clear photo helps us make a more accurate preview; a cropped or blurry one can look wrong."}
           </Body>
-          <View
-            style={{
-              backgroundColor: colors.white,
-              borderRadius: 26,
-              padding: 14,
-              gap: 10,
-              ...shadow(0.06),
-            }}
-          >
-            <Image
-              source={
-                chosenPhoto
-                  ? { uri: chosenPhoto.uri }
-                  : require("../../assets/illustrations/good-tryon-photo.png")
-              }
-              contentFit="contain"
-              style={{
-                height: 220,
-                backgroundColor: "#F4F0E6",
-                borderRadius: 18,
-              }}
-              accessibilityLabel={
-                chosenPhoto
-                  ? "Your selected try-on photo"
-                  : "Example: one person standing front facing, fully visible from head to shoes, in bright even light"
-              }
-            />
-            <Text
-              style={{
-                fontFamily: fonts.bold,
-                fontSize: 15,
-                textAlign: "center",
-              }}
-            >
-              {chosenPhoto
-                ? "Your selected photo"
-                : "Example of a good try-on photo"}
-            </Text>
-          </View>
-          <View
-            style={{
-              backgroundColor: colors.white,
-              borderRadius: 24,
-              padding: 18,
-              gap: 12,
-            }}
-          >
-            {[
-              "Keep your head and shoes fully in frame, with space around you.",
-              "Face the camera with arms clear of your body. Use a timer or ask a friend.",
-              "Use bright, even light and a simple background. Avoid blur and filters.",
-            ].map((tip) => (
+          {chosenPhoto ? (
+            <>
               <View
-                key={tip}
                 style={{
-                  flexDirection: "row",
+                  backgroundColor: colors.white,
+                  borderRadius: 26,
+                  padding: 14,
                   gap: 10,
-                  alignItems: "flex-start",
+                  ...shadow(0.06),
                 }}
               >
-                <Icon name="check" size={18} color="#127A55" />
-                <Body style={{ flex: 1, fontSize: 15 }}>{tip}</Body>
+                <Image
+                  source={
+                    chosenPhoto
+                      ? { uri: chosenPhoto.uri }
+                      : require("../../assets/illustrations/good-tryon-photo.png")
+                  }
+                  contentFit="contain"
+                  style={{
+                    height: 220,
+                    backgroundColor: "#F4F0E6",
+                    borderRadius: 18,
+                  }}
+                  accessibilityLabel={
+                    chosenPhoto
+                      ? "Your selected try-on photo"
+                      : "Example: one person standing front facing, fully visible from head to shoes, in bright even light"
+                  }
+                />
+                <Text
+                  style={{
+                    fontFamily: fonts.bold,
+                    fontSize: 15,
+                    textAlign: "center",
+                  }}
+                >
+                  {chosenPhoto
+                    ? "Your selected photo"
+                    : "Example of a good try-on photo"}
+                </Text>
               </View>
-            ))}
-          </View>
+              <View
+                style={{
+                  backgroundColor: colors.white,
+                  borderRadius: 24,
+                  padding: 18,
+                  gap: 12,
+                }}
+              >
+                {[
+                  "Keep your head and shoes fully in frame, with space around you.",
+                  "Face the camera with arms clear of your body. Use a timer or ask a friend.",
+                  "Use bright, even light and a simple background. Avoid blur and filters.",
+                ].map((tip) => (
+                  <View
+                    key={tip}
+                    style={{
+                      flexDirection: "row",
+                      gap: 10,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <Icon name="check" size={18} color="#127A55" />
+                    <Body style={{ flex: 1, fontSize: 15 }}>{tip}</Body>
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <PhotoGuide />
+          )}
         </ScrollView>
         <View
           style={{
@@ -1122,29 +1129,7 @@ export default function Onboarding() {
               <Body>See an example and photo tips first</Body>
             </View>
           </Pressable>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {["Face the camera", "Good light", "Head to toe in frame"].map(
-              (tip) => (
-                <View
-                  key={tip}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    backgroundColor: colors.white,
-                    borderRadius: 20,
-                    paddingHorizontal: 14,
-                    paddingVertical: 9,
-                  }}
-                >
-                  <Icon name="check" size={16} color="#127A55" />
-                  <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>
-                    {tip}
-                  </Text>
-                </View>
-              ),
-            )}
-          </View>
+          <PhotoGuide />
           <View
             style={{
               flexDirection: "row",

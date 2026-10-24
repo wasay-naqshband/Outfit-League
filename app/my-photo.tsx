@@ -12,19 +12,12 @@ import {
   Page,
 } from "../src/components/ui";
 import { useApp } from "../src/lib/state";
+import { PhotoGuide } from "../src/components/PhotoGuide";
 import { useSavedPhoto } from "../src/lib/queries";
 import { useTryOnDraft } from "../src/lib/tryon-draft";
 import { pickPhoto } from "../src/lib/photos";
 import { removeSavedPhoto, saveSavedPhoto } from "../src/lib/saved-photo";
 import { colors, fonts } from "../src/theme";
-
-const TIPS = [
-  "Your whole body, head to toe, in the frame",
-  "Stand straight, facing the camera, arms a little away from your body",
-  "Plain wall or background, good even light",
-  "Fitted clothes work best — avoid bulky coats",
-  "Ask a friend or use the camera timer",
-];
 
 export default function MyPhoto() {
   const { session } = useApp();
@@ -90,72 +83,7 @@ export default function MyPhoto() {
             ? "This photo is used for every try-on. It’s kept privately in your account, even if you delete it from your camera roll."
             : "Take or choose one clear photo. We keep it privately in your account so it’s ready for every try-on."}
         </Body>
-        <View
-          style={{
-            backgroundColor: colors.white,
-            borderRadius: 22,
-            padding: 18,
-            gap: 12,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 14 }}>
-            <View style={{ width: 104, gap: 6 }}>
-              <Image
-                source={require("../assets/examples/full-body-photo.jpg")}
-                contentFit="cover"
-                accessibilityLabel="Example: a full-body photo, head to toe, face visible"
-                style={{ width: 104, height: 226, borderRadius: 16 }}
-              />
-              <Text
-                style={{
-                  alignSelf: "center",
-                  fontFamily: fonts.bold,
-                  fontSize: 12,
-                  color: "#127A55",
-                }}
-              >
-                ✓ Like this
-              </Text>
-            </View>
-            <View style={{ flex: 1, gap: 10, justifyContent: "center" }}>
-              <Heading size={19}>Upload a full-body photo</Heading>
-              <Body style={{ fontSize: 14 }}>
-                Head to toe, standing, with your face clearly visible.
-              </Body>
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 8,
-                  alignItems: "flex-start",
-                  backgroundColor: "#FFE4E4",
-                  borderRadius: 12,
-                  padding: 10,
-                }}
-              >
-                <Icon name="x" size={16} color="#B42318" />
-                <Body style={{ flex: 1, fontSize: 13, color: "#7A1A12" }}>
-                  No selfies or mirror pics where the phone covers your face.
-                </Body>
-              </View>
-            </View>
-          </View>
-          <Heading size={18} style={{ marginTop: 4 }}>
-            For the best results
-          </Heading>
-          {TIPS.map((tip) => (
-            <View
-              key={tip}
-              style={{
-                flexDirection: "row",
-                gap: 10,
-                alignItems: "flex-start",
-              }}
-            >
-              <Icon name="check" size={18} />
-              <Body style={{ flex: 1, fontSize: 15 }}>{tip}</Body>
-            </View>
-          ))}
-        </View>
+        <PhotoGuide />
         {!session ? (
           <Button
             title="Sign in to save your photo"
