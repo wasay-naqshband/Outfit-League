@@ -1,5 +1,5 @@
 import "react-native-url-polyfill/auto";
-import { createClient, processLock } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { createSecureStorage } from "./secure-storage";
@@ -19,7 +19,6 @@ export const supabase =
           autoRefreshToken: true,
           detectSessionInUrl: false,
           flowType: "pkce",
-          lock: processLock,
         },
       })
     : null;

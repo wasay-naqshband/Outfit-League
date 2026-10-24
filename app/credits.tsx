@@ -74,7 +74,9 @@ export default function Credits() {
             secondary
             title="Open Apple subscriptions"
             onPress={() =>
-              void Linking.openURL("https://apps.apple.com/account/subscriptions")
+              void Linking.openURL(
+                "https://apps.apple.com/account/subscriptions",
+              )
             }
           />
         )}

@@ -15,6 +15,7 @@ import { accountAction } from "../src/lib/account";
 import { useApp } from "../src/lib/state";
 import { supabase } from "../src/lib/supabase";
 import { useProfile, useWallet } from "../src/lib/queries";
+import { useOnboarding } from "../src/lib/onboarding";
 import { colors } from "../src/theme";
 import { Avatar } from "../src/components/Avatar";
 
@@ -92,6 +93,7 @@ export default function Settings() {
   const { session } = useApp();
   const profile = useProfile();
   const wallet = useWallet();
+  const onboarding = useOnboarding();
   // Same query as the moderation screen; the server refuses non-moderators.
   const isAdmin = useQuery({
     queryKey: ["moderation", session?.user.id],
@@ -151,6 +153,22 @@ export default function Settings() {
               icon="clock"
               label="Try-on history"
               onPress={() => router.push("/history")}
+            />
+            {/* TEMPORARY for beta testing: remove before App Store release. */}
+            <Row
+              icon="refresh-cw"
+              label="Replay onboarding"
+              onPress={() => {
+                onboarding.update({
+                  step: 0,
+                  done: false,
+                  painPoints: [],
+                  styles: [],
+                  frequency: undefined,
+                  yearlyWaste: undefined,
+                });
+                router.push("/onboarding");
+              }}
             />
           </Group>
         )}

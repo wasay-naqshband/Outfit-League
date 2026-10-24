@@ -132,7 +132,7 @@ export default function Paywall() {
     {
       id: "monthly",
       title: "Pro monthly",
-      description: "50 try-ons + 2 360° views each month · 3-day free trial",
+      description: "50 try-ons + 2 360° views each month",
       fallback: "$9.99",
     },
     {
@@ -337,7 +337,7 @@ export default function Paywall() {
           <Body style={{ textAlign: "center", fontSize: 13 }}>
             {purchaseMessage ||
               (selected === "monthly"
-                ? "3-day trial if eligible, then renews at the App Store price. Cancel anytime in Apple settings."
+                ? "Renews monthly at the App Store price. Any introductory offer and eligibility will be shown by Apple before purchase. Cancel in Apple settings."
                 : selected === "yearly"
                   ? "Billed yearly. 50 try-ons and 2 included 360° views refresh monthly; unused monthly allowances expire."
                   : "One-time App Store purchase. Purchased try-ons never expire.")}

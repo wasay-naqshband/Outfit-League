@@ -157,6 +157,17 @@ test("store links: product photo found, private addresses refused", async () => 
     assert.throws(() => publicUrl(bad), /LINK_FAILED/, bad);
   assert.equal(publicUrl("https://www.zara.com/p").hostname, "www.zara.com");
 
+  const publicDns = async (hostname: string, type: "A" | "AAAA") => {
+    if (hostname === "private.shop.com")
+      return type === "A" ? ["10.1.2.3"] : [];
+    if (hostname === "v6-private.shop.com")
+      return type === "AAAA" ? ["fd00::1"] : [];
+    if (type === "A") return ["93.184.216.34"];
+    const missing = new Error("no AAAA record");
+    missing.name = "NotFound";
+    throw missing;
+  };
+
   // A redirect to a private address is refused before it's fetched.
   const seen: string[] = [];
   const request = (async (url: string) => {
@@ -169,16 +180,39 @@ test("store links: product photo found, private addresses refused", async () => 
       return new Response(new Uint8Array([1, 2, 3]), {
         headers: { "content-type": "image/webp" },
       });
+    if (url === "https://shop.com/dns-redirect")
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://private.shop.com/admin" },
+      });
     return new Response(null, {
       status: 302,
       headers: { location: "http://10.0.0.1/admin" },
     });
   }) as typeof fetch;
-  const found = await linkImage("https://shop.com/p", request);
+  const found = await linkImage("https://shop.com/p", request, publicDns);
   assert.equal(found.type, "image/webp");
   assert.deepEqual([...found.data], [1, 2, 3]);
-  await assert.rejects(linkImage("https://shop.com/r", request), /LINK_FAILED/);
+  await assert.rejects(
+    linkImage("https://shop.com/r", request, publicDns),
+    /LINK_FAILED/,
+  );
   assert.ok(!seen.some((url) => url.includes("10.0.0.1")));
+  const beforeDnsBlock = seen.length;
+  await assert.rejects(
+    linkImage("https://private.shop.com/p", request, publicDns),
+    /LINK_FAILED/,
+  );
+  await assert.rejects(
+    linkImage("https://v6-private.shop.com/p", request, publicDns),
+    /LINK_FAILED/,
+  );
+  await assert.rejects(
+    linkImage("https://shop.com/dns-redirect", request, publicDns),
+    /LINK_FAILED/,
+  );
+  assert.equal(seen.length, beforeDnsBlock + 1);
+  assert.ok(!seen.some((url) => url.includes("private.shop.com")));
 });
 
 test("Genlook gets every outfit piece with a title for its body part", async () => {
