@@ -1,9 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  FashnProvider,
-  GenlookProvider,
-} from "../supabase/functions/_shared/provider.ts";
+import { FashnProvider } from "../supabase/functions/_shared/provider.ts";
 import {
   decodeResult,
   toBase64,
@@ -119,101 +116,4 @@ test("provider errors do not leak credentials or raw error payloads", async () =
     adapter.submit("person", "garment"),
     /^Error: PROVIDER_UNAVAILABLE$/,
   );
-});
-
-test("Genlook sends private multipart inputs once with short retention and an AI label", async () => {
-  let calls = 0;
-  const adapter = new GenlookProvider("test-key", (async (url, options) => {
-    calls++;
-    assert.equal(url, "https://api.genlook.app/tryon/v1/try-on");
-    assert.equal(
-      (options?.headers as Record<string, string>)["x-api-key"],
-      "test-key",
-    );
-    const form = options?.body as FormData;
-    const body = JSON.parse(String(form.get("data")));
-    assert.equal(body.output.keepForDays, 1);
-    assert.equal(body.output.aiLabel, true);
-    assert.equal(body.products[0].validForDays, 1);
-    assert.equal(body.products[0].images[0].source.fileKey, "garment");
-    assert.equal(body.person.image.source.fileKey, "person");
-    assert.deepEqual(
-      new Uint8Array(await (form.get("person") as Blob).arrayBuffer()),
-      jpeg,
-    );
-    return Response.json({ generationId: "generation-1", status: "PENDING" });
-  }) as typeof fetch);
-  const photo = "data:image/jpeg;base64," + toBase64(jpeg);
-  assert.equal(await adapter.submit(photo, photo), "generation-1");
-  assert.equal(calls, 1);
-});
-
-test("Genlook handles states and copies a bounded CDN image without forwarding credentials", async () => {
-  for (const [status, state] of [
-    ["PENDING", "queued"],
-    ["PROCESSING", "processing"],
-    ["FAILED", "failed"],
-  ]) {
-    const adapter = new GenlookProvider("secret", (async () =>
-      Response.json({ status })) as typeof fetch);
-    assert.equal((await adapter.status("id")).state, state);
-  }
-  let calls = 0;
-  const adapter = new GenlookProvider("secret", (async (url, options) => {
-    calls++;
-    if (calls === 1)
-      return Response.json({
-        status: "COMPLETED",
-        resultImageUrl: "https://storage.googleapis.com/test/result.jpg",
-      });
-    assert.equal(url, "https://storage.googleapis.com/test/result.jpg");
-    assert.equal(options?.headers, undefined);
-    assert.equal(options?.redirect, "error");
-    return new Response(jpeg);
-  }) as typeof fetch);
-  assert.deepEqual(decodeResult((await adapter.status("id")).image!), jpeg);
-  assert.equal(calls, 2);
-});
-
-test("Genlook rejects private-network URLs, redirects, missing images and oversized results", async () => {
-  for (const url of [
-    "http://127.0.0.1/private",
-    "https://evil.example/photo.jpg",
-    "https://storage.googleapis.com.evil.example/a",
-    "https://user:pass@storage.googleapis.com/a",
-  ]) {
-    let calls = 0;
-    const adapter = new GenlookProvider("secret", (async () => {
-      calls++;
-      return Response.json({ status: "COMPLETED", resultImageUrl: url });
-    }) as typeof fetch);
-    await assert.rejects(adapter.status("id"), /INVALID_RESULT/);
-    assert.equal(calls, 1);
-  }
-  const missing = new GenlookProvider("secret", (async () =>
-    Response.json({ status: "COMPLETED" })) as typeof fetch);
-  await assert.rejects(missing.status("id"), /INVALID_RESULT/);
-  let calls = 0;
-  const huge = new GenlookProvider("secret", (async () =>
-    ++calls === 1
-      ? Response.json({
-          status: "COMPLETED",
-          resultImageUrl: "https://storage.googleapis.com/test/a",
-        })
-      : new Response(new Uint8Array(8 * 1024 * 1024 + 1))) as typeof fetch);
-  await assert.rejects(huge.status("id"), /INVALID_RESULT/);
-});
-
-test("Genlook exhausted credits do not retry or expose upstream diagnostics", async () => {
-  let calls = 0;
-  const adapter = new GenlookProvider("secret", (async () => {
-    calls++;
-    return new Response("private account information", { status: 402 });
-  }) as typeof fetch);
-  const photo = "data:image/jpeg;base64," + toBase64(jpeg);
-  await assert.rejects(
-    adapter.submit(photo, photo),
-    /^Error: PROVIDER_UNAVAILABLE$/,
-  );
-  assert.equal(calls, 1);
 });

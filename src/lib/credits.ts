@@ -1,3 +1,5 @@
+import { Alert, Platform } from "react-native";
+import { router } from "expo-router";
 import { supabase } from "./supabase";
 import type { CreditKind } from "./credits-domain";
 export type CreditTransaction = {
@@ -22,4 +24,20 @@ export async function creditHistory(
   const { data, error } = await query;
   if (error) throw error;
   return data as CreditTransaction[];
+}
+
+// One place for "no credits left": say so plainly, then offer the plans.
+export function outOfCredits(what: "try-on" | "360° view" = "try-on") {
+  const title = "You’re out of credits";
+  const body = `Get more to make this ${what}. Pick a plan or a try-on pack.`;
+  const open = () =>
+    router.push({ pathname: "/paywall", params: { source: "credits" } });
+  if (Platform.OS === "web") {
+    if (window.confirm(`${title}\n\n${body}`)) open();
+    return;
+  }
+  Alert.alert(title, body, [
+    { text: "Not now", style: "cancel" },
+    { text: "See plans", onPress: open },
+  ]);
 }

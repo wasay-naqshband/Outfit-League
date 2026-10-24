@@ -14,7 +14,7 @@ Your session is persisted on your device so you can remain signed in. The native
 
 ## AI previews
 
-Only an explicit Generate action, with your chosen person/garment images and try-on consent, sends those images to the configured AI provider. The current provider is Genlook. We request one-day product/output storage using the provider's API options and copy completed results into our private storage. This request is not a guarantee of deletion from every provider system or backup. Provider handling is subject to its own terms and retention practices.
+Only an explicit Generate action, with your chosen person/garment images and try-on consent, sends those images to the configured AI provider. The current provider is Google Gemini (paid API tier). Completed results are copied into our private storage. This request is not a guarantee of deletion from every provider system or backup. Provider handling is subject to its own terms and retention practices.
 
 A separate explicit "Make 360° view" action on a completed look sends that look's AI result image to Google's Gemini API (paid tier) to create a short turntable video, which is stored privately with the look and deleted with it. Google's paid-tier API terms govern its handling of those requests. The AI Stylist uses the same Gemini API only on an explicit tap: "Rate my fit" sends that look's result image (the rating is stored with the look), "Your colours" sends the saved try-on photo (the result is stored on the profile), and "What should I wear?" sends the occasion text plus closet item names, categories, colours, brands and tags (no photos). "Try on from a store link" makes the server fetch the public product page the user pasted or shared, and its product image, which is returned to the device and handled like a chosen photo.
 
@@ -32,7 +32,7 @@ Reports and moderation records are used to review abuse. App rate limiting uses 
 
 Current shopping samples are labeled illustrations with illustrative prices and no purchase links. A first retailer partnership is pending; it is not yet a live feed. Future approved retailer links may record the product and whether an affiliate destination was used without attaching your account identity or private photos to that click record. Retailer sites handle their own checkout and privacy practices. Any provider/retailer changes require this notice to be reviewed again.
 
-Supabase provides authentication, data/storage and server functions. Netlify hosts the web application. Genlook processes explicitly requested AI previews, and Google Gemini processes explicitly requested 360° views. Infrastructure providers may process technical request information needed to deliver their services. No external analytics sink, payment provider or credit-purchase service is currently connected in the app.
+Supabase provides authentication, data/storage and server functions. Netlify hosts the web application. Google Gemini processes explicitly requested AI previews, 360° views and AI stylist requests. Infrastructure providers may process technical request information needed to deliver their services. No external analytics sink, payment provider or credit-purchase service is currently connected in the app.
 
 ## Retention and removal
 

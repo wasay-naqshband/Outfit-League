@@ -16,17 +16,16 @@ export default function Privacy() {
         <Body>
           Only an explicit Generate action, after choosing both images and
           agreeing to the try-on consent, sends your selected photos to the
-          configured AI provider. The current provider is Genlook. We request
-          short retention and copy completed results into private app storage.
-          Tapping “Make 360° view” sends that look’s AI result to Google Gemini
-          to make a turning video. The AI Stylist (Rate my fit, Your colours,
-          What should I wear?) sends only what you ask about to Google Gemini:
-          that look, your saved try-on photo, or your closet item details.
-          Pasting or sharing a store link makes our server open that page to
-          find the product photo. If you save a try-on photo, it stays privately
-          in your account for future try-ons until you delete it in Settings →
-          Your try-on photo or delete your account. Browsing or shopping a saved
-          look does not run AI.
+          configured AI provider, Google Gemini. Completed results are copied
+          into private app storage. Tapping “Make 360° view” sends that look’s
+          AI result to Google Gemini to make a turning video. The AI Stylist
+          (Rate my fit, Your colours, What should I wear?) sends only what you
+          ask about to Google Gemini: that look, your saved try-on photo, or
+          your closet item details. Pasting or sharing a store link makes our
+          server open that page to find the product photo. If you save a try-on
+          photo, it stays privately in your account for future try-ons until you
+          delete it in Settings → Your try-on photo or delete your account.
+          Browsing or shopping a saved look does not run AI.
         </Body>
         <Heading size={25}>Battle images become public by choice.</Heading>
         <Body>

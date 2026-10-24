@@ -8,7 +8,6 @@ import {
   linkImage,
   publicUrl,
 } from "../supabase/functions/_shared/link-image.ts";
-import { GenlookProvider } from "../supabase/functions/_shared/provider.ts";
 import { toBase64 } from "../supabase/functions/_shared/domain.ts";
 
 const db = new PGlite();
@@ -213,22 +212,4 @@ test("store links: product photo found, private addresses refused", async () => 
   );
   assert.equal(seen.length, beforeDnsBlock + 1);
   assert.ok(!seen.some((url) => url.includes("private.shop.com")));
-});
-
-test("Genlook gets every outfit piece with a title for its body part", async () => {
-  const jpeg = await readFile("tests/fixtures/sample.jpg");
-  const photo = "data:image/jpeg;base64," + toBase64(new Uint8Array(jpeg));
-  const adapter = new GenlookProvider("k", (async (_url, options) => {
-    const form = options?.body as FormData;
-    const body = JSON.parse(String(form.get("data")));
-    assert.equal(body.products.length, 2);
-    assert.match(body.products[1].title, /Bottoms/);
-    assert.equal(body.products[1].images[0].source.fileKey, "garment1");
-    assert.ok(form.get("garment1") instanceof Blob);
-    return Response.json({ generationId: "g" });
-  }) as typeof fetch);
-  assert.equal(
-    await adapter.submit(photo, photo, [photo], ["top", "bottom"]),
-    "g",
-  );
 });

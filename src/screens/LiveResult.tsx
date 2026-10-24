@@ -25,6 +25,7 @@ import { rateLook, saveLook, startSpin } from "../lib/tryon-api";
 import { RatingCard } from "../components/Stylist";
 import { sharePreview } from "../lib/share-image";
 import { friendlyError } from "../types/tryon";
+import { outOfCredits } from "../lib/credits";
 import { colors, gradients, shadow } from "../theme";
 
 export default function LiveResult({ id }: { id: string }) {
@@ -70,7 +71,7 @@ export default function LiveResult({ id }: { id: string }) {
       (wallet.data?.available ?? 0) - (wallet.data?.subscription_tryons ?? 0),
     );
     if (included < 1 && permanentCredits < 1) {
-      router.push({ pathname: "/paywall", params: { source: "credits" } });
+      outOfCredits("360° view");
       return;
     }
     spinStart.current = Date.now();
@@ -83,7 +84,9 @@ export default function LiveResult({ id }: { id: string }) {
       );
       await client.invalidateQueries({ queryKey: ["wallet"] });
     } catch (e) {
-      setError(friendlyError(e));
+      if (e instanceof Error && e.message === "NO_CREDITS")
+        outOfCredits("360° view");
+      else setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

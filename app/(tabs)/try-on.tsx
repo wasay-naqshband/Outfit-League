@@ -39,6 +39,7 @@ import {
   uploadPhoto,
 } from "../../src/lib/tryon-api";
 import { friendlyError, isTerminal } from "../../src/types/tryon";
+import { outOfCredits as creditsAlert } from "../../src/lib/credits";
 import type { JobView } from "../../src/types/tryon";
 
 const CONSENT_KEY = "outfit-league-tryon-consent-v1";
@@ -249,7 +250,7 @@ export default function TryOn() {
       return;
     }
     if (outOfCredits) {
-      router.push({ pathname: "/paywall", params: { source: "credits" } });
+      creditsAlert();
       return;
     }
     if (!draft.person || !draft.garment) return;
@@ -290,7 +291,8 @@ export default function TryOn() {
         params: { id: result.job.id, t: String(startedAt.current) },
       });
     } catch (e) {
-      setError(friendlyError(e));
+      if (e instanceof Error && e.message === "NO_CREDITS") creditsAlert();
+      else setError(friendlyError(e));
       void history.refetch();
       void wallet.refetch();
     } finally {

@@ -9,11 +9,7 @@ import {
   validateJpeg,
   readRequestJson,
 } from "../_shared/domain.ts";
-import {
-  FashnProvider,
-  geminiTryOn,
-  GenlookProvider,
-} from "../_shared/provider.ts";
+import { FashnProvider, geminiTryOn } from "../_shared/provider.ts";
 import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
@@ -30,24 +26,12 @@ const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 const bucket = db.storage.from("tryon-private");
-const providerName =
-  env("TRYON_PROVIDER") === "gemini"
-    ? "Gemini"
-    : env("TRYON_PROVIDER") === "genlook"
-      ? "Genlook"
-      : "FASHN";
+const providerName = env("TRYON_PROVIDER") === "fashn" ? "FASHN" : "Gemini";
 const providers = {
-  Genlook: new GenlookProvider(env("GENLOOK_API_KEY"), fetch, normalizeResult),
   FASHN: new FashnProvider(env("FASHN_API_KEY")),
 };
 const providerKey = (name: string) =>
-  env(
-    name === "Gemini"
-      ? "GEMINI_API_KEY"
-      : name === "Genlook"
-        ? "GENLOOK_API_KEY"
-        : "FASHN_API_KEY",
-  );
+  env(name === "Gemini" ? "GEMINI_API_KEY" : "FASHN_API_KEY");
 const spinEnabled = () => !!env("GEMINI_API_KEY");
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 type Spin = {
@@ -157,9 +141,8 @@ async function storeResult(job: Job, bytes: Uint8Array) {
 // Gemini answers in one long call, so it runs after the request returns; the
 // app keeps polling "status". A dead worker is refunded when the job expires.
 async function runGemini(job: Job) {
-  let inputs: string[] = [];
   try {
-    inputs = await Promise.all(
+    const inputs = await Promise.all(
       [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
         (id) => readInput(id, job.owner_id),
       ),
@@ -173,33 +156,6 @@ async function runGemini(job: Job) {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error("gemini try-on failed", job.id, reason);
-    // Google refused outright (billing, outage, rate limit), so nothing was
-    // generated: hand the job to Genlook instead of failing it.
-    if (
-      ["PROVIDER_UNAVAILABLE", "PROVIDER_BUSY"].includes(reason) &&
-      inputs.length &&
-      providerKey("Genlook")
-    ) {
-      try {
-        const [person, garment, ...more] = inputs;
-        const id = await providers.Genlook.submit(
-          person!,
-          garment!,
-          more,
-          job.garment_parts,
-        );
-        checked(
-          await db
-            .from("try_on_jobs")
-            .update({ provider_id: "genlook:" + id })
-            .eq("id", job.id)
-            .eq("provider_id", "gemini:" + job.id),
-        );
-        return; // syncJob polls Genlook from here.
-      } catch (fallback) {
-        console.error("genlook fallback failed", job.id, String(fallback));
-      }
-    }
     const code =
       reason === "PROVIDER_UNAVAILABLE"
         ? "SUBMISSION_FAILED"
@@ -227,23 +183,17 @@ async function submitJob(job: Job) {
     EdgeRuntime.waitUntil(runGemini(job));
     return;
   }
-  const provider = providers[providerName];
   try {
-    const [person, garment, ...more] = await Promise.all(
-      [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
-        (id) => readInput(id, job.owner_id),
+    // FASHN wears one piece; "start" refuses extra pieces for it.
+    const [person, garment] = await Promise.all(
+      [job.person_asset_id, job.garment_asset_id].map((id) =>
+        readInput(id, job.owner_id),
       ),
     );
-    const prediction = await provider.submit(
-      person,
-      garment,
-      more,
-      job.garment_parts,
-    );
+    const prediction = await providers.FASHN.submit(person, garment);
     await rpc("attach_prediction", {
       p_job: job.id,
-      p_prediction:
-        providerName === "Genlook" ? "genlook:" + prediction : prediction,
+      p_prediction: prediction,
     });
   } catch (error) {
     // Never resubmit an ambiguous POST. Refund this job rather than risk charging twice.
@@ -268,15 +218,10 @@ async function syncJob(job: Job) {
     return;
   }
   if (!job.provider_id || job.provider_id.startsWith("gemini:")) return;
-  const jobProvider = job.provider_id.startsWith("genlook:")
-    ? "Genlook"
-    : "FASHN";
-  if (!providerKey(jobProvider)) return;
+  if (!providerKey("FASHN")) return;
   let prediction;
   try {
-    prediction = await providers[jobProvider].status(
-      jobProvider === "Genlook" ? job.provider_id.slice(8) : job.provider_id,
-    );
+    prediction = await providers.FASHN.status(job.provider_id);
   } catch (error) {
     if (
       error instanceof Error &&
