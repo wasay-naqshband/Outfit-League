@@ -1,8 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  searchLookalikes,
+  rank,
+  usStorePage,
+  shopping,
   usd,
+  type Lookalike,
 } from "../supabase/functions/_shared/lookalikes.ts";
 
 test("prices: dollars parse, junk is refused", () => {
@@ -12,16 +15,20 @@ test("prices: dollars parse, junk is refused", () => {
   for (const bad of ["", "Free", "$0", null, 12]) assert.equal(usd(bad), null);
 });
 
-test("lookalikes: US shopping search, cleaned, one per store, cheapest first", async () => {
+test("shopping: US search, only priced items with secure links and photos", async () => {
   let body: Record<string, unknown> = {};
-  const item = (store: string, price: string, link = "https://shop.com/p") => ({
-    title: `${store} zip knit`,
-    source: store,
+  const item = (
+    source: string,
+    price: string,
+    link = "https://shop.com/p",
+  ) => ({
+    title: `${source} zip knit`,
+    source,
     price,
     link,
     imageUrl: "https://img.com/a.jpg",
   });
-  const items = await searchLookalikes("k", "grey zip knit", (async (
+  const items = await shopping("k", "grey zip knit", (async (
     _url: string,
     options: RequestInit,
   ) => {
@@ -29,21 +36,88 @@ test("lookalikes: US shopping search, cleaned, one per store, cheapest first", a
     return Response.json({
       shopping: [
         item("H&M", "$49.99"),
-        item("Target", "$39.59"),
-        item("Target", "$12.00"), // cheaper item from the same store wins
-        item("Shady", "$5.00", "http://insecure.com/p"), // not https: dropped
-        item("NoPrice", "Free"), // no price: dropped
-        item("PacSun", "$36.39"),
+        item("Shady", "$5.00", "http://insecure.com/p"),
+        item("NoPrice", "Free"),
       ],
     });
   }) as typeof fetch);
   assert.equal(body.gl, "us");
   assert.deepEqual(
-    items.map((i) => [i.store, i.price]),
+    items.map((i) => i.store),
+    ["H&M"],
+  );
+});
+
+test("rank: weak matches dropped, closest first, then cheapest, one per store", () => {
+  const l = (store: string, price: number, score?: number): Lookalike => ({
+    title: store,
+    store,
+    price,
+    url: `https://${store}.com/${price}`,
+    image: "https://img.com/a.jpg",
+    score,
+  });
+  assert.deepEqual(
+    rank([
+      l("Walmart", 12, 3), // plain knit: dropped
+      l("Shein", 18, 9),
+      l("Shein", 15, 7), // same store, lower score: dropped
+      l("Target", 25, 7),
+      l("H&M", 49, 10),
+    ]).map((i) => [i.store, i.price]),
     [
-      ["Target", 12],
-      ["PacSun", 36.39],
-      ["H&M", 49.99],
+      ["H&M", 49], // closest match
+      ["Shein", 18],
+      ["Target", 25],
     ],
+  );
+  // No scores (AI unavailable): cheapest first, nothing dropped.
+  assert.deepEqual(
+    rank([l("A", 30), l("B", 10)]).map((i) => i.store),
+    ["B", "A"],
+  );
+});
+
+test("lens: only US store pages, not social, wholesale or foreign storefronts", () => {
+  for (const ok of [
+    "https://us.shein.com/Zip-Knit-p-1.html",
+    "https://www.shein.com/Zip-Knit-p-2.html",
+    "https://piccoclothing.com/products/dnd-sweater-brown",
+  ])
+    assert.equal(usStorePage(ok), true, ok);
+  for (const bad of [
+    "https://au.shein.com/Zip-Knit-p-1.html",
+    "https://www.temu.com/is-en/zip-knit.html",
+    "https://emestudios.com/au/en/product/thrill",
+    "https://www.instagram.com/reel/abc/",
+    "https://www.dhgate.com/wholesale/sweater.html",
+    "https://www.mercadolibre.com.ar/campera",
+    "https://piccoclothing.com/",
+    null,
+  ])
+    assert.equal(usStorePage(bad), false, String(bad));
+});
+
+test("rank: tops up with similar styles when there are few close matches; unpriced last", () => {
+  const l = (
+    store: string,
+    price: number | null,
+    score: number,
+  ): Lookalike => ({
+    title: store,
+    store,
+    price,
+    url: `https://${store}.com/p`,
+    image: "https://img.com/a.jpg",
+    score,
+  });
+  assert.deepEqual(
+    rank([
+      l("Shein", null, 9),
+      l("Walmart", 22, 5),
+      l("Target", 30, 6),
+      l("Amazon", 15, 4), // too different
+    ]).map((i) => i.store),
+    ["Shein", "Walmart", "Target"],
   );
 });

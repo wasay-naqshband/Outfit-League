@@ -9,8 +9,10 @@ import { useTryOnDraft } from "../lib/tryon-draft";
 import { friendlyError } from "../types/tryon";
 import { colors, fonts, shadow } from "../theme";
 
-const money = (price: number) =>
-  "$" + (Number.isInteger(price) ? price : price.toFixed(2));
+const money = (price: number | null) =>
+  price === null
+    ? "See price"
+    : "$" + (Number.isInteger(price) ? price : price.toFixed(2));
 
 // "Cheaper lookalikes": similar items from US stores, cheapest first.
 // Free sees two; Pro sees them all. Links go straight to the store for now.
@@ -27,6 +29,14 @@ export function Lookalikes({ id }: { id: string }) {
   // Not set up yet, or nothing found: leave the result screen as it was.
   if (query.isError || (query.data && !query.data.items.length)) return null;
 
+  const items = query.data?.items ?? [];
+  const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
+  const badge = (i: number) =>
+    i === 0 && items[0]?.score !== undefined
+      ? "Closest match"
+      : items[i]!.price === cheapest
+        ? "Cheapest"
+        : null;
   async function tryOn(index: number) {
     if (trying >= 0) return;
     setTrying(index);
@@ -67,12 +77,34 @@ export function Lookalikes({ id }: { id: string }) {
                 ...shadow(0.06),
               }}
             >
-              <Image
-                source={{ uri: item.image }}
-                contentFit="cover"
-                accessibilityLabel={item.title}
-                style={{ height: 180, borderRadius: 16 }}
-              />
+              <View>
+                <Image
+                  source={{ uri: item.image }}
+                  contentFit="cover"
+                  accessibilityLabel={item.title}
+                  style={{ height: 180, borderRadius: 16 }}
+                />
+                {!!badge(i) && (
+                  <Text
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      left: 8,
+                      overflow: "hidden",
+                      borderRadius: 10,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      backgroundColor:
+                        badge(i) === "Cheapest" ? "#127A55" : colors.ink,
+                      color: colors.white,
+                      fontFamily: fonts.bold,
+                      fontSize: 11,
+                    }}
+                  >
+                    {badge(i)}
+                  </Text>
+                )}
+              </View>
               <Text style={{ fontFamily: fonts.heading, fontSize: 20 }}>
                 {money(item.price)}
               </Text>

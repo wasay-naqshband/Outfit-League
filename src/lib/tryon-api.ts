@@ -99,9 +99,11 @@ export const lookalikePhoto = (id: string, index: number) =>
 export type Lookalike = {
   title: string;
   store: string;
-  price: number;
+  /** null when only the store page shows the price */
+  price: number | null;
   url: string;
   image: string;
+  score?: number;
 };
 export const fetchLookalikes = (id: string) =>
   callTryOn<{ items: Lookalike[]; locked: number }>({

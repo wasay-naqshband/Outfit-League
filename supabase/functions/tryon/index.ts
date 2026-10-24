@@ -18,10 +18,17 @@ import { normalizeResult } from "../_shared/result-image.ts";
 import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 import { linkImage } from "../_shared/link-image.ts";
-import { searchLookalikes, type Lookalike } from "../_shared/lookalikes.ts";
+import {
+  lens,
+  rank,
+  shopping,
+  thumbnail,
+  type Lookalike,
+} from "../_shared/lookalikes.ts";
 import {
   colorAnalysis,
   garmentQuery,
+  scoreLookalikes,
   pickOutfit,
   rateFit,
   type ClosetItem,
@@ -399,6 +406,50 @@ async function makeSpin(job: Job, spin: Spin) {
     );
   }
 }
+// Lens (what looks the same) + shopping (US prices), then an AI score keeps
+// only close matches. Each search is best-effort; scoring failure falls back
+// to cheapest first.
+async function findLookalikes(job: Job): Promise<Lookalike[]> {
+  const gemini = env("GEMINI_API_KEY"),
+    serper = env("SERPER_API_KEY");
+  const garment = await readInput(job.garment_asset_id, job.owner_id);
+  const asset: Asset = required(
+    await db
+      .from("private_assets")
+      .select("*")
+      .eq("id", job.garment_asset_id)
+      .single(),
+  );
+  // Lens fetches the photo itself: a private link that expires in 5 minutes.
+  const signed = required(await bucket.createSignedUrl(asset.path, 300));
+  const [query, visual] = await Promise.all([
+    garmentQuery(gemini, garment),
+    lens(serper, signed.signedUrl).catch(() => ({ items: [], queries: [] })),
+  ]);
+  const seen = new Set<string>();
+  const priced = await Promise.all(
+    [query, ...visual.queries].map((q) => shopping(serper, q).catch(() => [])),
+  );
+  // Visual matches first (closest look), then up to 8 priced results per query.
+  const candidates = [
+    ...visual.items.slice(0, 8),
+    ...priced.flatMap((list) => list.slice(0, 8)),
+  ]
+    .filter((item) => !seen.has(item.url) && !!seen.add(item.url))
+    .slice(0, 24);
+  const photos = await Promise.all(candidates.map((c) => thumbnail(c.image)));
+  const scorable = candidates.filter((_, i) => photos[i]);
+  const scores = await scoreLookalikes(
+    gemini,
+    garment,
+    photos.filter((p): p is { mime: string; data: string } => !!p),
+  ).catch(() => null);
+  return rank(
+    scores
+      ? scorable.map((item, i) => ({ ...item, score: scores[i] }))
+      : candidates,
+  );
+}
 async function hasPro(owner: string) {
   const subscription = checked(
     await db
@@ -650,13 +701,7 @@ Deno.serve(async (req) => {
       let items = job.lookalikes;
       if (!items) {
         await rpc("battle_rate", { p_key: "lookalike:" + owner, p_max: 30 });
-        const query = await garmentQuery(
-          env("GEMINI_API_KEY"),
-          await readInput(job.garment_asset_id, owner),
-        );
-        // ponytail: ranked by price only; add an AI look-alike score if
-        // results drift from the original garment.
-        items = await searchLookalikes(env("SERPER_API_KEY"), query);
+        items = await findLookalikes(job);
         checked(
           await db
             .from("try_on_jobs")
@@ -675,7 +720,12 @@ Deno.serve(async (req) => {
       if (!item) throw new Error("NOT_FOUND");
       await rpc("battle_rate", { p_key: "link:" + owner, p_max: 30 });
       // The store page's product photo is sharper than the shopping thumbnail.
-      const photo = await linkImage(item.url)
+      const photo = await (
+        item.photo
+          ? linkImage(item.photo)
+          : Promise.reject(new Error("LINK_NO_IMAGE"))
+      )
+        .catch(() => linkImage(item.url))
         .catch(() => linkImage(item.image))
         .catch(() => {
           throw new Error("LINK_NO_IMAGE");

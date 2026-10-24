@@ -215,7 +215,7 @@ export async function garmentQuery(
     [
       photo(garment),
       {
-        text: "This photo shows a clothing item, possibly worn by someone. Describe only the main garment as a short online shopping search query (4 to 8 words: gender if obvious, colour, material or knit, style, type), e.g. 'men's grey cream colour block zip knit cardigan'. No brand names unless clearly printed.",
+        text: "This photo shows a clothing item, possibly worn by someone. Describe only the main garment as an online shopping search query of 5 to 10 words. Lead with what makes it distinctive (colour blocks, stripes, lettering or graphics, unusual collar or texture), then gender if obvious, colours and type, e.g. 'men's grey cream colour block letter zip knit cardigan'. No brand names unless clearly printed.",
       },
     ],
     { type: "OBJECT", properties: { query: str }, required: ["query"] },
@@ -224,4 +224,63 @@ export async function garmentQuery(
   const query = line(out.query, 100);
   if (!query) throw new Error("STYLIST_FAILED");
   return query;
+}
+
+// Cheaper lookalikes, step 3: score each candidate photo against the garment.
+export async function scoreLookalikes(
+  key: string,
+  garment: string,
+  candidates: { mime: string; data: string }[],
+  request: typeof fetch = fetch,
+): Promise<number[]> {
+  const out = await ask(
+    key,
+    [
+      photo(garment),
+      ...candidates.flatMap((c, i): Part[] => [
+        { text: `Candidate ${i}:` },
+        { inline_data: { mime_type: c.mime, data: c.data } },
+      ]),
+      {
+        text:
+          "The first image is the original garment (possibly worn by someone; judge only the main garment). " +
+          "Score how closely each candidate's garment matches it, 0 to 10: same type and silhouette, colours and colour placement, pattern or graphics (lettering, stripes, blocks), knit or fabric texture, collar and fastening. " +
+          "10 = near identical, 7 = clearly the same style with small differences, 4 = same category but a different look, 0 = unrelated. Return one score per candidate index.",
+      },
+    ],
+    {
+      type: "OBJECT",
+      properties: {
+        scores: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              index: { type: "INTEGER" },
+              score: { type: "INTEGER" },
+            },
+            required: ["index", "score"],
+          },
+        },
+      },
+      required: ["scores"],
+    },
+    request,
+  );
+  const scores = candidates.map(() => 0);
+  for (const s of (Array.isArray(out.scores) ? out.scores : []) as {
+    index?: unknown;
+    score?: unknown;
+  }[]) {
+    const i = Number(s.index),
+      v = Number(s.score);
+    if (
+      Number.isInteger(i) &&
+      i >= 0 &&
+      i < scores.length &&
+      Number.isFinite(v)
+    )
+      scores[i] = Math.max(0, Math.min(10, Math.round(v)));
+  }
+  return scores;
 }
