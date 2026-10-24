@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Modal, View } from "react-native";
+import { Alert, Modal, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -63,8 +63,20 @@ export default function LiveResult({ id }: { id: string }) {
       setBusy(false);
     }
   }
+  // 360° views are for paying Pro members; a free trial includes try-ons only.
+  const paidPro =
+    !!wallet.data?.subscription_active && !wallet.data?.subscription_trial;
+  function needPro() {
+    if (wallet.data?.subscription_trial)
+      Alert.alert(
+        "360° views come with Pro",
+        "Your free trial includes try-ons. 360° views unlock when your Pro membership starts.",
+      );
+    else router.push({ pathname: "/paywall", params: { source: "feature" } });
+  }
   async function makeSpin() {
     if (busy) return;
+    if (!paidPro) return needPro();
     const included = wallet.data?.subscription_spins ?? 0;
     const permanentCredits = Math.max(
       0,
@@ -84,7 +96,8 @@ export default function LiveResult({ id }: { id: string }) {
       );
       await client.invalidateQueries({ queryKey: ["wallet"] });
     } catch (e) {
-      if (e instanceof Error && e.message === "NO_CREDITS")
+      if (e instanceof Error && e.message === "PRO_REQUIRED") needPro();
+      else if (e instanceof Error && e.message === "NO_CREDITS")
         outOfCredits("360° view");
       else setError(friendlyError(e));
     } finally {
@@ -183,9 +196,11 @@ export default function LiveResult({ id }: { id: string }) {
                     title={
                       busy
                         ? "Please wait…"
-                        : (wallet.data?.subscription_spins ?? 0) > 0
-                          ? `Make 360° view · ${wallet.data?.subscription_spins} included`
-                          : "Make 360° view · 1 credit"
+                        : !paidPro
+                          ? "360° view · Pro"
+                          : (wallet.data?.subscription_spins ?? 0) > 0
+                            ? `Make 360° view · ${wallet.data?.subscription_spins} included`
+                            : "Make 360° view · 1 credit"
                     }
                     icon="sparkles"
                     onPress={() => {

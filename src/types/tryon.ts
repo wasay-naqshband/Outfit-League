@@ -30,6 +30,8 @@ export type Wallet = {
   subscription_tryons: number;
   subscription_spins: number;
   subscription_active: boolean;
+  /** In the free trial: try-ons only, no 360° views. */
+  subscription_trial?: boolean;
   subscription_product: string | null;
   subscription_expires_at: string | null;
   allowance_expires_at: string | null;

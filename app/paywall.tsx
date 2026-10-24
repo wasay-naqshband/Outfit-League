@@ -304,6 +304,7 @@ export default function Paywall() {
           <View style={{ gap: 8, marginTop: 2 }}>
             {[
               "Pro: store links and 2 included 360° views each month",
+              "Free trials include try-ons; 360° views start with paid Pro",
               "One credit for each successful garment try-on",
               "Failed generations return the reserved credits",
               "Your try-on photo stays private",
@@ -337,7 +338,7 @@ export default function Paywall() {
           <Body style={{ textAlign: "center", fontSize: 13 }}>
             {purchaseMessage ||
               (selected === "monthly"
-                ? "Renews monthly at the App Store price. Any introductory offer and eligibility will be shown by Apple before purchase. Cancel in Apple settings."
+                ? "Renews monthly at the App Store price. Any introductory offer and eligibility will be shown by Apple before purchase. A free trial includes try-ons only. Cancel in Apple settings."
                 : selected === "yearly"
                   ? "Billed yearly. 50 try-ons and 2 included 360° views refresh monthly; unused monthly allowances expire."
                   : "One-time App Store purchase. Purchased try-ons never expire.")}

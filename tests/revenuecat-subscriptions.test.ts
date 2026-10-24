@@ -22,6 +22,7 @@ before(async () => {
     "202610230018_revenuecat_credits.sql",
     "202610230019_revenuecat_pack_15.sql",
     "202610230020_revenuecat_pro.sql",
+    "202610240021_spin_pro_only.sql",
   ]) {
     await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
   }
@@ -50,10 +51,16 @@ const wallet = async () =>
       [owner],
     )
   ).rows[0];
-const subscriptionEvent = (id: string, type: string, expiresAt: string) =>
+const subscriptionEvent = (
+  id: string,
+  type: string,
+  expiresAt: string,
+  period = "NORMAL",
+  user = owner,
+) =>
   db.query(
-    "select apply_revenuecat_subscription_event($1,$2,$3,'outfit_pro_monthly',$4::timestamptz,'TRIAL')",
-    [owner, id, type, expiresAt],
+    "select apply_revenuecat_subscription_event($1,$2,$3,'outfit_pro_monthly',$4::timestamptz,$5)",
+    [user, id, type, expiresAt, period],
   );
 
 test("Pro grants monthly allowances separately and an included spin does not spend permanent credits", async () => {
@@ -122,4 +129,63 @@ test("expiration removes only unused subscription credits and purchased pack cre
   assert.equal(current.subscription_tryons, 0);
   assert.equal(current.subscription_spins, 0);
   assert.equal(current.available, 18); // Three free + fifteen purchased.
+});
+
+test("a free trial includes try-ons only; 360° views need paid Pro", async () => {
+  const trial = randomUUID();
+  await db.query("insert into auth.users(id) values($1)", [trial]);
+  await db.query("select initialize_account($1)", [trial]);
+  const soon = new Date(Date.now() + 3 * 86400000).toISOString();
+  await subscriptionEvent("t1", "INITIAL_PURCHASE", soon, "TRIAL", trial);
+  const w = await db.query<{
+    subscription_tryons: number;
+    subscription_spins: number;
+  }>(
+    "select subscription_tryons,subscription_spins from credit_wallets where owner_id=$1",
+    [trial],
+  );
+  assert.deepEqual(w.rows[0], {
+    subscription_tryons: 50,
+    subscription_spins: 0,
+  });
+  const add = async (kind: string) => {
+    const id = randomUUID();
+    await db.query(
+      "insert into private_assets(id,owner_id,kind,path,byte_size,content_type) values($1,$2,$3,$4,1024,'image/jpeg')",
+      [id, trial, kind, `${trial}/${id}.jpg`],
+    );
+    return id;
+  };
+  const job = (
+    await db.query<{ r: { job: { id: string } } }>(
+      "select reserve_tryon($1,$2,$3,$4,'tryon-v1') r",
+      [trial, randomUUID(), await add("person"), await add("garment")],
+    )
+  ).rows[0]!.r.job;
+  await db.query("select finish_tryon($1,$2,null)", [
+    job.id,
+    await add("result"),
+  ]);
+  await assert.rejects(
+    db.query("select reserve_spin($1,$2)", [trial, job.id]),
+    /PRO_REQUIRED/,
+  );
+  // The trial converts to a paid month: 360° views unlock.
+  await subscriptionEvent(
+    "t2",
+    "RENEWAL",
+    new Date(Date.now() + 30 * 86400000).toISOString(),
+    "NORMAL",
+    trial,
+  );
+  await db.query(
+    "update user_subscriptions set next_allowance_at=now()-interval '1 second' where owner_id=$1",
+    [trial],
+  );
+  await db.query("select refresh_subscription_allowance($1)", [trial]);
+  const spin = await db.query<{ r: { created: boolean } }>(
+    "select reserve_spin($1,$2) r",
+    [trial, job.id],
+  );
+  assert.equal(spin.rows[0]!.r.created, true);
 });
