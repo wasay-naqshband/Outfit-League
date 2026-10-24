@@ -157,28 +157,61 @@ async function storeResult(job: Job, bytes: Uint8Array) {
 // Gemini answers in one long call, so it runs after the request returns; the
 // app keeps polling "status". A dead worker is refunded when the job expires.
 async function runGemini(job: Job) {
+  let inputs: string[] = [];
   try {
-    const [person, ...garments] = await Promise.all(
+    inputs = await Promise.all(
       [job.person_asset_id, job.garment_asset_id, ...job.extra_garments].map(
         (id) => readInput(id, job.owner_id),
       ),
     );
+    const [person, ...garments] = inputs;
     const bytes = await normalizeResult(
-      await geminiTryOn(providerKey("Gemini"), person, garments),
+      await geminiTryOn(providerKey("Gemini"), person!, garments),
     );
     validateJpeg(bytes);
     await storeResult(job, bytes);
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error("gemini try-on failed", job.id, reason);
+    // Google refused outright (billing, outage, rate limit), so nothing was
+    // generated: hand the job to Genlook instead of failing it.
+    if (
+      ["PROVIDER_UNAVAILABLE", "PROVIDER_BUSY"].includes(reason) &&
+      inputs.length &&
+      providerKey("Genlook")
+    ) {
+      try {
+        const [person, garment, ...more] = inputs;
+        const id = await providers.Genlook.submit(
+          person!,
+          garment!,
+          more,
+          job.garment_parts,
+        );
+        checked(
+          await db
+            .from("try_on_jobs")
+            .update({ provider_id: "genlook:" + id })
+            .eq("id", job.id)
+            .eq("provider_id", "gemini:" + job.id),
+        );
+        return; // syncJob polls Genlook from here.
+      } catch (fallback) {
+        console.error("genlook fallback failed", job.id, String(fallback));
+      }
+    }
     const code =
-      error instanceof Error &&
-      [
-        "PROVIDER_BUSY",
-        "INVALID_RESULT",
-        "INVALID_IMAGE",
-        "IMAGE_DIMENSIONS",
-      ].includes(error.message)
-        ? error.message
-        : "GENERATION_FAILED";
+      reason === "PROVIDER_UNAVAILABLE"
+        ? "SUBMISSION_FAILED"
+        : error instanceof Error &&
+            [
+              "PROVIDER_BUSY",
+              "INVALID_RESULT",
+              "INVALID_IMAGE",
+              "IMAGE_DIMENSIONS",
+            ].includes(error.message)
+          ? error.message
+          : "GENERATION_FAILED";
     await rpc("finish_tryon", { p_job: job.id, p_error: code }).catch(() => {});
   }
 }
