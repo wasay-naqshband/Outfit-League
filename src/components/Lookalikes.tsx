@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, Heading, Icon } from "./ui";
+import { CookingLoader, LOOKALIKE_MESSAGES } from "./CookingLoader";
 import { fetchLookalikes, lookalikePhoto } from "../lib/tryon-api";
 import { useTryOnDraft } from "../lib/tryon-draft";
 import { friendlyError } from "../types/tryon";
@@ -58,7 +59,12 @@ export function Lookalikes({ id }: { id: string }) {
         <Text style={{ fontSize: 20 }}>💸</Text>
       </View>
       {query.isPending ? (
-        <Body style={{ fontSize: 14 }}>Finding similar styles for less…</Body>
+        // Same animated wait as the try-on, sized to sit inside the result.
+        <CookingLoader
+          messages={LOOKALIKE_MESSAGES}
+          seconds={20}
+          height={270}
+        />
       ) : (
         <ScrollView
           horizontal

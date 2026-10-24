@@ -203,3 +203,11 @@ export const SPIN_MESSAGES = [
   "Smoothing every angle…",
   "Polishing the final frames…",
 ];
+export const LOOKALIKE_MESSAGES = [
+  "Scanning stores for your look… 🔎",
+  "Matching the colours and details…",
+  "Comparing prices across the web 💸",
+  "Skipping the ones that don’t match…",
+  "Finding the best deals…",
+  "Worth it — your wallet will thank you ✨",
+];
