@@ -74,13 +74,19 @@ export type ComparableProduct = {
   currency: string;
   price_minor: number;
   is_demo: boolean;
+  is_test_preview?: boolean;
 };
 export function comparisonGroups<T extends ComparableProduct>(
   products: T[],
 ): { key: string; items: T[] }[] {
   const groups = new Map<string, T[]>();
   for (const product of products) {
-    const key = `${product.category} · ${product.currency} · ${product.is_demo ? "Sample prices" : "Catalog prices"}`;
+    const source = product.is_test_preview
+      ? "Test snapshot prices"
+      : product.is_demo
+        ? "Sample prices"
+        : "Catalog prices";
+    const key = `${product.category} · ${product.currency} · ${source}`;
     groups.set(key, [...(groups.get(key) ?? []), product]);
   }
   return [...groups].map(([key, items]) => ({

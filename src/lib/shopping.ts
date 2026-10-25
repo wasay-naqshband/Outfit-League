@@ -9,6 +9,7 @@ import {
 import { randomUUID } from "expo-crypto";
 import type { Palette } from "../theme";
 import type { garments } from "./explore";
+import ecosusiTestSnapshot from "../awin-ecosusi-test.json";
 export type Product = {
   id: string;
   retailer_id: string;
@@ -28,6 +29,8 @@ export type Product = {
   price_checked_at: string | null;
   image_url: string | null;
   expires_at: string | null;
+  is_test_preview?: boolean;
+  feed_updated_at?: string;
 };
 export type CatalogSearch = {
   category: string;
@@ -77,6 +80,34 @@ export class SupabaseCatalog implements CatalogAdapter {
   }
 }
 export const catalog = new SupabaseCatalog();
+class EcosusiTestCatalog implements CatalogAdapter {
+  async page(
+    search: CatalogSearch,
+    cursor?: { price: number; id: string },
+  ): Promise<Product[]> {
+    if (search.exactExplore) return [];
+    return (ecosusiTestSnapshot as Product[])
+      .filter(
+        (item) =>
+          item.currency === search.currency &&
+          (search.category === "" || item.category === search.category) &&
+          (!search.search ||
+            `${item.name} ${item.brand} ${item.color} ${item.tags}`
+              .toLowerCase()
+              .includes(search.search.toLowerCase())) &&
+          (search.maxMinor == null || item.price_minor < search.maxMinor),
+      )
+      .sort((a, b) => a.price_minor - b.price_minor || a.id.localeCompare(b.id))
+      .filter(
+        (item) =>
+          !cursor ||
+          item.price_minor > cursor.price ||
+          (item.price_minor === cursor.price && item.id > cursor.id),
+      )
+      .slice(0, 20);
+  }
+}
+export const ecosusiTestCatalog = new EcosusiTestCatalog();
 export async function shoppingSource(params: {
   look?: string;
   library?: string;

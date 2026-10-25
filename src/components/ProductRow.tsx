@@ -81,9 +81,11 @@ export function ProductRow({
               color: colors.text3,
             }}
           >
-            {item.is_demo
-              ? "Sample catalog · illustrative price"
-              : item.retailer_name || "Catalog retailer"}
+            {item.is_test_preview
+              ? "Test preview · feed price may have changed"
+              : item.is_demo
+                ? "Sample catalog · illustrative price"
+                : item.retailer_name || "Catalog retailer"}
           </Text>
         </View>
         <Heading size={19}>{money(item.price_minor, item.currency)}</Heading>
@@ -102,7 +104,25 @@ export function ProductRow({
               .filter(Boolean)
               .join(" · ")}
           </Body>
-          {item.is_demo ? (
+          {item.is_test_preview ? (
+            <>
+              <StickerBadge size={12}>
+                Test preview · not a current offer
+              </StickerBadge>
+              <Body style={{ fontSize: 13 }}>
+                Awin feed snapshot dated {item.feed_updated_at ?? "unknown"}.
+                The displayed price may have changed and availability is
+                unverified. This direct product link does not use commission
+                tracking.
+              </Body>
+              <Button
+                secondary
+                disabled={busy || !item.product_url}
+                title={busy ? "Opening…" : "Open Ecosusi product"}
+                onPress={onRetailer}
+              />
+            </>
+          ) : item.is_demo ? (
             <>
               <StickerBadge size={12}>Demo product</StickerBadge>
               <Body style={{ fontSize: 13 }}>

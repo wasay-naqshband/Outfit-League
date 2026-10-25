@@ -18,6 +18,7 @@ import { ProductRow } from "../src/components/ProductRow";
 import { FloatingTabBar } from "../src/components/FloatingTabBar";
 import {
   catalog,
+  ecosusiTestCatalog,
   retailerDestination,
   shoppingSource,
   type Product,
@@ -39,6 +40,7 @@ export default function Shop() {
     { session } = useApp();
   const [segment, setSegment] = useState("Similar"),
     [live, setLive] = useState(false),
+    [testPreview, setTestPreview] = useState(false),
     [category, setCategory] = useState("Jackets"),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
@@ -86,6 +88,7 @@ export default function Shop() {
       "catalog",
       session?.user.id,
       live,
+      testPreview,
       category,
       query,
       segment,
@@ -93,10 +96,10 @@ export default function Shop() {
       source.data?.exploreId,
     ],
     queryFn: ({ pageParam }) =>
-      catalog.page(
+      (testPreview ? ecosusiTestCatalog : catalog).page(
         {
           category,
-          live,
+          live: live && !testPreview,
           search: query,
           currency: "USD",
           maxMinor: segment === "Budget" ? maxMinor : null,
@@ -122,6 +125,13 @@ export default function Shop() {
     setBusy(true);
     setError("");
     try {
+      if (item.is_test_preview) {
+        if (!item.product_url)
+          throw new Error("The direct product link is missing.");
+        await Linking.openURL(item.product_url);
+        analytics.track("product_clicked", { link: "retailer" });
+        return;
+      }
       const target = await retailerDestination(item.id);
       await Linking.openURL(target.url);
       analytics.track("product_clicked", {
@@ -166,17 +176,44 @@ export default function Shop() {
             }}
           >
             <Heading size={19}>
-              {live ? "USA retailer catalog · USD" : "Sample catalog · USD"}
+              {testPreview
+                ? "Ecosusi test preview · USD"
+                : live
+                  ? "USA retailer catalog · USD"
+                  : "Sample catalog · USD"}
             </Heading>
             <Body style={{ fontSize: 13 }}>
-              {live
-                ? "Approved US retailer offers only. Expired and out-of-stock offers are hidden. Prices exclude shipping and tax; confirm details with the retailer."
-                : "Original garment illustrations and illustrative prices demonstrate the shopping flow. These samples cannot be purchased."}
+              {testPreview
+                ? "Test-only snapshot from May 15, 2026. Prices may have changed and availability is unverified. Product pages open directly; no commission tracking is used."
+                : live
+                  ? "Approved US retailer offers only. Expired and out-of-stock offers are hidden. Prices exclude shipping and tax; confirm details with the retailer."
+                  : "Original garment illustrations and illustrative prices demonstrate the shopping flow. These samples cannot be purchased."}
             </Body>
+            <Button
+              secondary
+              title={
+                testPreview
+                  ? "Exit Ecosusi test preview"
+                  : "Try Ecosusi test preview · 68 products"
+              }
+              onPress={() => {
+                const enabled = !testPreview;
+                setTestPreview(enabled);
+                if (enabled) {
+                  setLive(false);
+                  setCategory("Accessories");
+                  setSegment("Similar");
+                  setSearch("");
+                }
+                setCompare(false);
+                setExpanded(null);
+              }}
+            />
             <Button
               secondary
               title={live ? "View sample catalog" : "View USA retailer catalog"}
               onPress={() => {
+                setTestPreview(false);
                 setLive(!live);
                 setCompare(false);
                 setExpanded(null);
@@ -273,9 +310,11 @@ export default function Shop() {
                       message={
                         segment === "Exact"
                           ? "Exact matches require a verified catalog identifier, retailer SKU or manual review with evidence. Similar-looking images and demo products never count as exact matches."
-                          : live
-                            ? "No current approved US offers match. The first retailer feed is awaiting access; expired offers are hidden. Try the sample catalog to test the flow."
-                            : "Try another category, search term or maximum price. The sample catalog currently contains tops and jackets."
+                          : testPreview
+                            ? "No Ecosusi products match. Try another search or select Accessories."
+                            : live
+                              ? "No current approved US offers match. The first retailer feed is awaiting access; expired offers are hidden. Try the sample catalog to test the flow."
+                              : "Try another category, search term or maximum price. The sample catalog currently contains tops and jackets."
                       }
                       action={
                         segment === "Exact" ? "See similar styles" : undefined
@@ -351,9 +390,8 @@ export default function Shop() {
                       ))}
                       <Body style={{ fontSize: 12 }}>
                         Compares loaded products of the same category, currency
-                        and sample/live status. Load more to include older
-                        results. Sample prices are illustrative, not retailer
-                        offers.
+                        and catalog mode. Test preview prices come from the May
+                        15, 2026 feed snapshot and may have changed.
                       </Body>
                     </View>
                   )}
