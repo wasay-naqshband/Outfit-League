@@ -53,7 +53,15 @@ export type IconName =
   | "flag"
   | "whatsapp"
   | "copy"
-  | "send";
+  | "send"
+  | "coffee"
+  | "briefcase"
+  | "map"
+  | "edit-2"
+  | "link"
+  | "arrow-right"
+  | "home"
+  | "gift";
 export function Icon({
   name,
   color = c.ink,

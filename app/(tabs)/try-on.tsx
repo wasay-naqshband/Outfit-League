@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { analytics, trackPhotoProblem } from "../../src/lib/analytics";
 import { askForNotifications } from "../../src/lib/notifications";
-import { Alert, Modal, Platform, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { clearSharedPayloads, getSharedPayloads } from "expo-sharing";
 import { LinearGradient } from "expo-linear-gradient";
@@ -12,20 +12,25 @@ import {
   Button,
   CreditPill,
   Heading,
+  Icon,
   Page,
   SettingsButton,
 } from "../../src/components/ui";
+import { StickerTag, TactileButton } from "../../src/components/Redesign";
 import { PhotoPickerCard } from "../../src/components/PhotoPickerCard";
 import { PieceSheet } from "../../src/components/PieceSheet";
 import {
   CookingLoader,
   TRYON_MESSAGES,
 } from "../../src/components/CookingLoader";
-import { colors, gradients } from "../../src/theme";
+import { colors, fonts, gradients } from "../../src/theme";
+import { Image } from "expo-image";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "../../src/lib/state";
 import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import {
   useHistory,
+  useJob,
   useSavedPhoto,
   useTryOnConfig,
   useWallet,
@@ -56,6 +61,7 @@ export default function TryOn() {
   const config = useTryOnConfig();
   const wallet = useWallet();
   const history = useHistory();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("");
@@ -64,6 +70,8 @@ export default function TryOn() {
   const submitted = useRef(false);
   const startedAt = useRef(0);
   const active = history.data?.find((job) => !isTerminal(job.status));
+  const latest = history.data?.find((job) => job.status === "completed");
+  const latestView = useJob(latest?.id);
   const outOfCredits = wallet.data?.available === 0;
   const saved = useSavedPhoto();
   const removed = useRef(false);
@@ -291,136 +299,281 @@ export default function TryOn() {
     }
   }
   return (
-    <Page>
-      {/* Full-screen wait from the first tap: uploads and start run underneath. */}
-      <Modal visible={busy} animationType="fade" statusBarTranslucent>
-        <CookingLoader
-          fullScreen
-          messages={TRYON_MESSAGES}
-          seconds={25}
-          startedAt={startedAt.current}
-        />
-      </Modal>
-      <LinearGradient
-        colors={gradients.yellow}
-        style={{
-          padding: 20,
-          paddingTop: 28,
-          gap: 20,
-          borderBottomLeftRadius: 36,
-          borderBottomRightRadius: 36,
-        }}
-      >
-        <View
+    <View style={{ flex: 1 }}>
+      <Page>
+        {/* Full-screen wait from the first tap: uploads and start run underneath. */}
+        <Modal visible={busy} animationType="fade" statusBarTranslucent>
+          <CookingLoader
+            fullScreen
+            messages={TRYON_MESSAGES}
+            seconds={25}
+            startedAt={startedAt.current}
+          />
+        </Modal>
+        <LinearGradient
+          colors={gradients.yellow}
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
+            padding: 20,
+            paddingTop: 28,
+            gap: 18,
+            borderBottomLeftRadius: 36,
+            borderBottomRightRadius: 36,
           }}
         >
-          <Heading size={26}>Try On</Heading>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <CreditPill compact />
-            <SettingsButton />
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Heading size={26}>Try On</Heading>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            >
+              <CreditPill compact />
+              <SettingsButton />
+            </View>
           </View>
-        </View>
-        <Heading size={34}>Try any outfit on yourself.</Heading>
-      </LinearGradient>
-      <View style={{ padding: 20, gap: 16 }}>
-        {active && (
-          <Button
-            title="Resume your current try-on"
-            icon="sparkles"
-            onPress={() =>
-              router.push({
-                pathname: "/generation/[id]",
-                params: { id: active.id },
-              })
-            }
-          />
-        )}
-        <Body>
-          Choose a clear full-length photo of yourself, then any top, bottoms,
-          jacket or dress. Add a photo or paste a link from any store.
-        </Body>
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <PhotoPickerCard
-            label="Your photo"
-            photo={draft.person}
-            disabled={busy}
-            onChoose={() => {
-              router.push("/my-photo");
-            }}
-            onRemove={() => {
-              void remove("person");
-            }}
-          />
-          <PhotoPickerCard
-            label="Clothing item"
-            photo={draft.garment}
-            disabled={busy || sheetBusy}
-            onChoose={() => {
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Heading size={32}>Try any outfit</Heading>
+            <StickerTag size={22}>on you.</StickerTag>
+          </View>
+        </LinearGradient>
+        <View style={{ padding: 20, paddingBottom: 190, gap: 18 }}>
+          {active && (
+            <Button
+              title="Resume your current try-on"
+              icon="sparkles"
+              onPress={() =>
+                router.push({
+                  pathname: "/generation/[id]",
+                  params: { id: active.id },
+                })
+              }
+            />
+          )}
+          <View style={{ position: "relative", flexDirection: "row", gap: 12 }}>
+            <PhotoPickerCard
+              label="Your photo"
+              photo={draft.person}
+              disabled={busy}
+              onChoose={() => {
+                router.push("/my-photo");
+              }}
+              onRemove={() => {
+                void remove("person");
+              }}
+            />
+            <PhotoPickerCard
+              label="The fit"
+              photo={draft.garment}
+              disabled={busy || sheetBusy}
+              onChoose={() => {
+                setSheetError("");
+                setSheet(true);
+              }}
+              onRemove={() => {
+                void remove("garment");
+              }}
+            />
+            <View
+              accessible={false}
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                zIndex: 2,
+                left: "50%",
+                top: 98,
+                marginLeft: -24,
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                borderWidth: 3,
+                borderColor: colors.ink,
+                backgroundColor: colors.yellow,
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0px 4px 0px #14121F",
+              }}
+            >
+              <Icon name="plus" size={24} />
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Paste a link from any store"
+            onPress={() => {
               setSheetError("");
               setSheet(true);
             }}
-            onRemove={() => {
-              void remove("garment");
-            }}
-          />
-        </View>
-        {sheetBusy && !sheet && <Body>Getting the item from your link…</Body>}
-        {!session && (
-          <Button
-            secondary
-            title="Sign in for a real try-on"
-            onPress={() => router.push("/auth")}
-          />
-        )}
-        {!!error && (
-          <Body
             style={{
-              padding: 16,
-              borderRadius: 18,
-              backgroundColor: colors.chip,
+              minHeight: 48,
+              alignSelf: "center",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
             }}
           >
-            {error}
-          </Body>
-        )}
-        <Button
-          icon="sparkles"
+            <Icon name="link" size={20} />
+            <Text
+              style={{
+                color: colors.ink,
+                fontFamily: fonts.bold,
+                fontSize: 16,
+                textDecorationLine: "underline",
+              }}
+            >
+              Or paste a link from any store
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole={latest ? "button" : undefined}
+            accessibilityLabel={latest ? "Open your latest try-on" : undefined}
+            disabled={!latest}
+            onPress={() =>
+              latest &&
+              router.push({
+                pathname: "/generation/[id]",
+                params: { id: latest.id },
+              })
+            }
+            style={{
+              minHeight: 96,
+              borderRadius: 28,
+              padding: 12,
+              backgroundColor: colors.ink,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              boxShadow: "0px 12px 26px rgba(20,18,31,0.2)",
+            }}
+          >
+            <View
+              style={{
+                width: 58,
+                height: 70,
+                borderRadius: 20,
+                overflow: "hidden",
+                backgroundColor: "#38324F",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {latestView.data?.afterUrl ? (
+                <Image
+                  source={{ uri: latestView.data.afterUrl }}
+                  contentFit="cover"
+                  style={{ width: "100%", height: "100%" }}
+                  accessibilityLabel="Latest try-on result"
+                />
+              ) : (
+                <Icon name="sparkles" size={24} color={colors.yellow} />
+              )}
+            </View>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Heading size={18} style={{ color: colors.white }}>
+                {latest ? "Your latest look" : "Your look lands here"}
+              </Heading>
+              <Body style={{ color: "#D9D6E3", fontSize: 13 }}>
+                {latest
+                  ? "Tap to open your finished try-on."
+                  : "Then save it, battle it or shop it."}
+              </Body>
+            </View>
+            {latest && <Icon name="chevron-right" color={colors.white} />}
+          </Pressable>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {["Full-length", "Good light", "One item"].map((tip) => (
+              <View
+                key={tip}
+                style={{
+                  minHeight: 42,
+                  paddingHorizontal: 12,
+                  borderRadius: 22,
+                  backgroundColor: colors.white,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <Icon name="check" size={17} color="#127A55" />
+                <Text style={{ fontFamily: fonts.bold, fontSize: 13 }}>
+                  {tip}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {sheetBusy && !sheet && <Body>Getting the item from your link…</Body>}
+          {!!error && (
+            <Body
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                backgroundColor: colors.chip,
+              }}
+            >
+              {error}
+            </Body>
+          )}
+        </View>
+        <PieceSheet
+          visible={sheet}
+          busy={sheetBusy}
+          error={sheetError}
+          onClose={() => setSheet(false)}
+          onPhoto={() => void choosePhoto()}
+          proEnabled={wallet.data?.subscription_active ?? false}
+          onPro={() => {
+            setSheet(false);
+            router.push({
+              pathname: "/paywall",
+              params: { source: "feature" },
+            });
+          }}
+          onLink={(url) => void useLink(url)}
+        />
+      </Page>
+      <View
+        style={{
+          position: "absolute",
+          left: 20,
+          right: 20,
+          bottom: Math.max(92, insets.bottom + 76),
+        }}
+      >
+        <TactileButton
+          icon={outOfCredits ? "sparkles" : "camera"}
           title={
             busy
               ? stage
-              : wallet.data?.available === 0
-                ? "Get more try-ons"
-                : "Generate try-on · 1 credit"
+              : !session
+                ? "Sign in to try on"
+                : outOfCredits
+                  ? "Get more try-ons"
+                  : "Generate try-on · 1 credit"
           }
           disabled={
             busy ||
-            !session ||
             !!active ||
-            (!outOfCredits &&
+            (Boolean(session) &&
+              !outOfCredits &&
               (!config.data?.enabled || !draft.person || !draft.garment))
           }
           onPress={() => {
-            void generate();
+            if (!session) router.push("/auth");
+            else void generate();
           }}
         />
       </View>
-      <PieceSheet
-        visible={sheet}
-        busy={sheetBusy}
-        error={sheetError}
-        onClose={() => setSheet(false)}
-        onPhoto={() => void choosePhoto()}
-        proEnabled={wallet.data?.subscription_active ?? false}
-        onPro={() => {
-          setSheet(false);
-          router.push({ pathname: "/paywall", params: { source: "feature" } });
-        }}
-        onLink={(url) => void useLink(url)}
-      />
-    </Page>
+    </View>
   );
 }

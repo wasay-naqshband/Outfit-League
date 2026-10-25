@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "C:/Users/GNG/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe",
+      "runtimeArgs": ["node_modules/expo/bin/cli", "start", "--web", "--port", "8081"],
+      "port": 8081
+    }
+  ]
+}

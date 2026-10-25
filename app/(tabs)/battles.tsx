@@ -13,6 +13,8 @@ import {
   Page,
   SettingsButton,
 } from "../../src/components/ui";
+import { StickerTag } from "../../src/components/Redesign";
+import { BattleModeCards } from "../../src/components/BattleModeCards";
 import { myBattles, type BattleRow } from "../../src/lib/battles";
 import { useApp } from "../../src/lib/state";
 import { colors, fonts, gradients, shadow } from "../../src/theme";
@@ -25,48 +27,6 @@ const STATUS: Record<BattleRow["status"], string> = {
   unpublished: "Stopped",
   hidden: "Under review",
 };
-
-function ModeCard({
-  emoji,
-  title,
-  text,
-  tint,
-  onPress,
-}: {
-  emoji: string;
-  title: string;
-  text: string;
-  tint: readonly [string, string, ...string[]];
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      style={{ flex: 1, borderRadius: 28, ...shadow(0.1) }}
-    >
-      <LinearGradient
-        colors={tint}
-        style={{
-          flex: 1,
-          borderRadius: 28,
-          padding: 18,
-          minHeight: 200,
-          justifyContent: "space-between",
-          borderWidth: 3,
-          borderColor: colors.white,
-        }}
-      >
-        <Text style={{ fontSize: 40 }}>{emoji}</Text>
-        <View style={{ gap: 6 }}>
-          <Heading size={21}>{title}</Heading>
-          <Body style={{ fontSize: 13, color: colors.ink }}>{text}</Body>
-        </View>
-      </LinearGradient>
-    </Pressable>
-  );
-}
 
 export default function Battles() {
   const { session } = useApp();
@@ -82,13 +42,26 @@ export default function Battles() {
     refetchInterval: 30000,
   });
   const items = query.data?.pages.flat() ?? [];
+  const liveCount = items.filter((item) => item.status === "published").length;
   const start = (kind: "choose" | "versus") =>
     router.push(
       session ? { pathname: "/battle-create", params: { kind } } : "/auth",
     );
+
   return (
     <Page>
-      <View style={{ padding: 20, paddingTop: 24, gap: 20 }}>
+      <LinearGradient
+        colors={gradients.yellow}
+        style={{
+          paddingHorizontal: 20,
+          paddingTop: 28,
+          paddingBottom: 24,
+          gap: 14,
+          borderBottomLeftRadius: 32,
+          borderBottomRightRadius: 32,
+          ...shadow(0.1),
+        }}
+      >
         <View
           style={{
             flexDirection: "row",
@@ -96,31 +69,49 @@ export default function Battles() {
             justifyContent: "space-between",
           }}
         >
-          <View>
-            <Heading size={32}>Battles</Heading>
-            <Body>Let your friends decide.</Body>
-          </View>
+          <Heading size={32}>Battles</Heading>
           <SettingsButton />
         </View>
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <ModeCard
-            emoji="🤔"
-            title="Help me choose"
-            text="Which outfit should I wear? Ask your friends."
-            tint={gradients.lavender}
-            onPress={() => start("choose")}
-          />
-          <ModeCard
-            emoji="⚔️"
-            title="Battle a friend"
-            text="Your look vs theirs. Let the group vote."
-            tint={gradients.coral}
-            onPress={() => start("versus")}
-          />
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 8,
+          }}
+        >
+          <Heading size={29}>Let your friends</Heading>
+          <StickerTag size={23}>decide.</StickerTag>
         </View>
+      </LinearGradient>
+
+      <View style={{ padding: 20, paddingBottom: 140, gap: 18 }}>
+        <BattleModeCards
+          onChoose={() => start("choose")}
+          onVersus={() => start("versus")}
+        />
+
         {session && (
           <>
-            <Heading size={22}>Your battles</Heading>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                marginTop: 2,
+              }}
+            >
+              <Heading size={22}>Your battles</Heading>
+              <Text
+                style={{
+                  color: colors.text2,
+                  fontFamily: fonts.bold,
+                  fontSize: 13,
+                }}
+              >
+                {liveCount} live
+              </Text>
+            </View>
             {query.isPending ? (
               <LoadingSkeleton />
             ) : query.isError ? (
@@ -129,61 +120,37 @@ export default function Battles() {
                 retry={() => void query.refetch()}
               />
             ) : !items.length ? (
-              <Body>Your battles will show up here.</Body>
+              <View
+                style={{
+                  borderRadius: 24,
+                  backgroundColor: colors.white,
+                  padding: 18,
+                  ...shadow(0.06),
+                }}
+              >
+                <Body>Your battles will show up here.</Body>
+              </View>
             ) : (
               <View
                 style={{
                   backgroundColor: colors.white,
                   borderRadius: 24,
                   overflow: "hidden",
+                  ...shadow(0.05),
                 }}
               >
                 {items.map((item, i) => (
-                  <Pressable
+                  <BattleRowView
                     key={item.id}
-                    accessibilityRole="button"
+                    item={item}
+                    last={i === items.length - 1}
                     onPress={() =>
                       router.push({
                         pathname: "/battle/[id]",
                         params: { id: item.id },
                       })
                     }
-                    style={({ pressed }) => ({
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 14,
-                      padding: 16,
-                      backgroundColor: pressed ? colors.chip : colors.white,
-                      borderTopWidth: i ? 1 : 0,
-                      borderTopColor: colors.cream,
-                    })}
-                  >
-                    <Text style={{ fontSize: 24 }}>
-                      {item.kind === "versus" ? "⚔️" : "🤔"}
-                    </Text>
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text
-                        numberOfLines={1}
-                        style={{ fontFamily: fonts.bold, fontSize: 16 }}
-                      >
-                        {item.title}
-                      </Text>
-                      <Text
-                        style={{
-                          fontFamily: fonts.medium,
-                          fontSize: 13,
-                          color:
-                            item.status === "published"
-                              ? colors.ink
-                              : colors.text3,
-                        }}
-                      >
-                        {item.status === "published" ? "● " : ""}
-                        {STATUS[item.status]}
-                      </Text>
-                    </View>
-                    <Icon name="chevron-right" size={18} color={colors.text3} />
-                  </Pressable>
+                  />
                 ))}
               </View>
             )}
@@ -199,5 +166,97 @@ export default function Battles() {
         )}
       </View>
     </Page>
+  );
+}
+
+function BattleRowView({
+  item,
+  last,
+  onPress,
+}: {
+  item: BattleRow;
+  last: boolean;
+  onPress: () => void;
+}) {
+  const tone =
+    item.status === "published"
+      ? { dot: "#1FAF66", text: "#0E6B45" }
+      : item.status === "waiting"
+        ? { dot: "#E0A100", text: "#8A5A00" }
+        : {
+            dot: null,
+            text: item.status === "draft" ? "#6B6675" : colors.text3,
+          };
+  const tile =
+    item.status === "draft"
+      ? "#F1EEE4"
+      : item.kind === "versus"
+        ? "#FFD2C8"
+        : "#E6E1FF";
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${item.title}, ${STATUS[item.status]}`}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 64,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: pressed ? colors.cream : colors.white,
+        borderBottomWidth: last ? 0 : 1,
+        borderBottomColor: "#F0ECE0",
+      })}
+    >
+      <View
+        style={{
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          backgroundColor: tile,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: fonts.heading,
+            fontSize: item.kind === "versus" ? 13 : 12,
+            color: colors.ink,
+          }}
+        >
+          {item.kind === "versus" ? "VS" : "A/B"}
+        </Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.ink }}
+        >
+          {item.title}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+          {tone.dot && (
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: tone.dot,
+              }}
+            />
+          )}
+          <Text
+            style={{ fontFamily: fonts.bold, fontSize: 11, color: tone.text }}
+          >
+            {STATUS[item.status]}
+          </Text>
+        </View>
+      </View>
+      <Icon name="chevron-right" size={18} color={colors.text3} />
+    </Pressable>
   );
 }

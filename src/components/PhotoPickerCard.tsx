@@ -1,10 +1,11 @@
 import React from "react";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, Text, View } from "react-native";
 import { Icon } from "./ui";
 import { colors, fonts, shadow } from "../theme";
 import type { LocalPhoto } from "../types/tryon";
-// A Try On photo tile; same height with or without a photo.
+
 export function PhotoPickerCard({
   label,
   photo,
@@ -18,78 +19,156 @@ export function PhotoPickerCard({
   onRemove: () => void;
   disabled?: boolean;
 }) {
+  const person = label === "Your photo";
   return (
-    <View style={{ flexBasis: "45%", flexGrow: 1 }}>
+    <View style={{ flex: 1, minWidth: 0 }}>
       <Pressable
         disabled={disabled}
         accessibilityRole="button"
-        accessibilityLabel={(photo ? "Replace " : "Choose ") + label}
+        accessibilityLabel={`${photo ? "Change" : "Add"} ${label}`}
         onPress={onChoose}
         style={{
-          height: 190,
+          height: 244,
           borderRadius: 28,
           borderWidth: 4,
           borderColor: colors.white,
-          backgroundColor: label === "Your photo" ? "#DCD5FF" : "#CFF5E4",
           overflow: "hidden",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          ...shadow(0.08),
+          ...shadow(0.12),
         }}
       >
-        {photo ? (
-          <>
+        <LinearGradient
+          colors={person ? ["#E6E1FF", "#C9BEFF"] : ["#DDF8EC", "#A9E6CC"]}
+          style={{ flex: 1, padding: 16, alignItems: "center" }}
+        >
+          {photo && (
             <Image
               source={{ uri: photo.uri }}
-              style={{ width: "100%", height: "100%" }}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              }}
               contentFit="cover"
               cachePolicy="none"
+              accessibilityLabel={
+                person ? "Your selected photo" : "Selected clothing item"
+              }
+            />
+          )}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              right: 8,
+              bottom: 8,
+              borderRadius: 20,
+              borderWidth: 2,
+              borderStyle: "dashed",
+              borderColor: "rgba(20,18,31,0.22)",
+            }}
+          />
+          <View
+            style={{
+              alignSelf: "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <View
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: colors.ink,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.yellow,
+                  fontFamily: fonts.bold,
+                  fontSize: 13,
+                }}
+              >
+                {person ? "1" : "2"}
+              </Text>
+            </View>
+            <Text
+              style={{
+                color: colors.ink,
+                fontFamily: fonts.bold,
+                fontSize: 16,
+              }}
+            >
+              {person ? "You" : "The fit"}
+            </Text>
+          </View>
+          {!photo ? (
+            <View
+              pointerEvents="none"
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon name={person ? "user" : "hanger"} size={68} />
+            </View>
+          ) : null}
+          <View
+            pointerEvents="none"
+            style={{
+              minHeight: 44,
+              alignSelf: "stretch",
+              borderRadius: 14,
+              backgroundColor: photo ? "rgba(255,255,255,0.96)" : colors.ink,
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "row",
+              gap: 7,
+              marginTop: "auto",
+            }}
+          >
+            <Icon
+              name={photo ? "refresh-cw" : "plus"}
+              size={18}
+              color={photo ? colors.ink : colors.yellow}
             />
             <Text
               style={{
-                position: "absolute",
-                left: 8,
-                bottom: 8,
-                backgroundColor: colors.white,
-                borderRadius: 12,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                overflow: "hidden",
+                color: photo ? colors.ink : colors.white,
                 fontFamily: fonts.bold,
-                fontSize: 12,
-                color: colors.ink,
+                fontSize: 14,
               }}
             >
-              {label}
+              {photo ? "Change" : person ? "Add your photo" : "Add an item"}
             </Text>
-          </>
-        ) : (
-          <>
-            <Icon name="image" size={30} />
-            <Text style={{ fontFamily: fonts.bold, fontSize: 16 }}>
-              {label}
-            </Text>
-          </>
-        )}
+          </View>
+        </LinearGradient>
       </Pressable>
       {photo && (
         <Pressable
           disabled={disabled}
           accessibilityRole="button"
-          accessibilityLabel={"Remove " + label}
+          accessibilityLabel={`Remove ${label}`}
           onPress={onRemove}
           hitSlop={8}
           style={{
             position: "absolute",
-            top: 8,
-            right: 8,
+            top: 14,
+            right: 14,
             width: 32,
             height: 32,
             borderRadius: 16,
             backgroundColor: colors.white,
-            justifyContent: "center",
             alignItems: "center",
+            justifyContent: "center",
           }}
         >
           <Icon name="x" size={16} />
