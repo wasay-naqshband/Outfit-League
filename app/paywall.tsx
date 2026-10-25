@@ -52,8 +52,12 @@ export default function Paywall() {
         else if (!next.yearly && !next.monthly && next.pack)
           setSelected("pack");
       })
-      .catch(() =>
-        setPurchaseMessage("App Store offers couldn’t load. Please try again."),
+      // Apple's own reason (e.g. products or the Paid Apps agreement not ready)
+      // so a setup problem can be told apart from a network blip.
+      .catch((e: { message?: string }) =>
+        setPurchaseMessage(
+          `App Store offers couldn’t load. ${e?.message ?? "Please try again."}`,
+        ),
       );
   }, [session?.user.id]);
 
