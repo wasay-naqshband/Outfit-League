@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { decode } from "base64-arraybuffer";
 import { analytics } from "./analytics";
 import { Platform } from "react-native";
+import * as Application from "expo-application";
 import { randomUUID } from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import { preparePhoto } from "./photos";
@@ -179,6 +180,18 @@ export type Scan = {
   pairs: { id: string; name: string }[];
   idea: string;
 };
+// This phone's app ID, so the free daily scan cap counts per phone as well as
+// per account. ponytail: resets on reinstall and can be faked; Apple
+// DeviceCheck if people get around it.
+async function deviceId() {
+  try {
+    if (Platform.OS === "ios") return await Application.getIosIdForVendorAsync();
+    if (Platform.OS === "android") return Application.getAndroidId();
+  } catch {
+    /* no id: the account cap still applies */
+  }
+  return null;
+}
 // Scan tab: the photo is uploaded privately, read, then removed.
 export async function scanPhoto(photo: LocalPhoto, styles: string[]) {
   const id = await uploadPhoto(photo, "garment");
@@ -187,6 +200,7 @@ export async function scanPhoto(photo: LocalPhoto, styles: string[]) {
       action: "scan",
       id,
       styles,
+      device: await deviceId(),
     });
   } finally {
     void callTryOn({ action: "remove-upload", id }).catch(() => {});

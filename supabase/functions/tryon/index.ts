@@ -837,6 +837,13 @@ Deno.serve(async (req) => {
         p_max: pro ? 60 : 5,
         p_error: "SCAN_DAILY_LIMIT",
       });
+      // Same cap per phone, so extra accounts on one phone don't get more.
+      if (typeof body.device === "string" && /^[\w-]{8,64}$/.test(body.device))
+        await rpc("daily_rate", {
+          p_key: "scan-device:" + body.device,
+          p_max: pro ? 60 : 5,
+          p_error: "SCAN_DAILY_LIMIT",
+        });
       const asset: Asset = required(
         await db
           .from("private_assets")

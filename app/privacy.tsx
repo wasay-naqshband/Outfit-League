@@ -59,6 +59,8 @@ export default function Privacy() {
           random account ID, never your photos, text or email. If you allow
           notifications, your phone’s push token is stored so we can tell you
           when a look is ready or your battle gets votes.
+          Scan sends this app’s device ID only to count the daily free
+          scan limit; the count is deleted within two days.
         </Body>
         <Heading size={25}>Removing images.</Heading>
         <Body>
