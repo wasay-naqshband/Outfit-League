@@ -65,7 +65,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose your own photos for private outfit previews.",
-          "cameraPermission": "Take a photo for your private outfit preview.",
+          "cameraPermission": "Take photos of you or your clothes for your private Closet and outfit previews.",
           "microphonePermission": false
         }
       ],
