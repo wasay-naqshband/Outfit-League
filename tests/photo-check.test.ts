@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkPhoto } from "../supabase/functions/_shared/stylist.ts";
+import { checkPhoto, labelGarment } from "../supabase/functions/_shared/stylist.ts";
 import { objectionable } from "../supabase/functions/_shared/profanity.ts";
 
 const answer = (out: Record<string, unknown>) =>
@@ -52,4 +52,18 @@ test("comment filter catches slurs and disguises, not everyday words", () => {
     "dickies pants",
   ])
     assert.equal(objectionable(fine), false, fine);
+});
+
+test("closet labeler: keeps bounded fields and a known category", async () => {
+  const label = await labelGarment(
+    "k",
+    uri,
+    answer({ name: "Light blue denim jacket", category: "Coats", color: "light blue", brand: "" }),
+  );
+  assert.deepEqual(label, {
+    name: "Light blue denim jacket",
+    category: "Other",
+    color: "light blue",
+    brand: "",
+  });
 });

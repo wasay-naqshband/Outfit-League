@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   TextInput,
   View,
 } from "react-native";
@@ -13,7 +12,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Body,
   Button,
-  CategoryChip,
   ErrorState,
   FlatHeader,
   Heading,
@@ -21,7 +19,6 @@ import {
   Page,
 } from "../src/components/ui";
 import {
-  categories,
   cleanSourceUrl,
   libraryItem,
   saveLibraryItem,
@@ -29,6 +26,7 @@ import {
 } from "../src/lib/library";
 import { disposePhoto, pickPhoto, preparePhoto } from "../src/lib/photos";
 import { useApp } from "../src/lib/state";
+import { callTryOn } from "../src/lib/tryon-api";
 import type { LocalPhoto } from "../src/types/tryon";
 import { colors, fonts } from "../src/theme";
 
@@ -146,11 +144,11 @@ export default function LibraryEditor() {
       active = false;
     };
   }, [params.shared]);
-  async function choose() {
+  async function choose(camera = false) {
     if (submitted.current) return;
     setError("");
     try {
-      const picked = await pickPhoto();
+      const picked = await pickPhoto(camera);
       if (picked) {
         setPhoto(picked);
         setRemovePhoto(false);
@@ -188,10 +186,18 @@ export default function LibraryEditor() {
         query.data,
         removePhoto,
       );
-      await client.invalidateQueries({ queryKey: ["library"] });
-      await client.invalidateQueries({
-        queryKey: ["library-item", session?.user.id, id],
-      });
+      const refresh = async () => {
+        await client.invalidateQueries({ queryKey: ["library"] });
+        await client.invalidateQueries({
+          queryKey: ["library-item", session?.user.id, id],
+        });
+      };
+      await refresh();
+      // AI fills name, category, colour and brand in the background.
+      if (kind === "wardrobe" && photo)
+        void callTryOn({ action: "label", id, rename: !name.trim() })
+          .then(refresh)
+          .catch(() => {});
       if (params.shared && Platform.OS !== "web") clearSharedPayloads();
       router.replace({ pathname: "/library-item/[id]", params: { id } });
     } catch (e) {
@@ -257,7 +263,7 @@ export default function LibraryEditor() {
               </Heading>
               <Body>
                 {kind === "wardrobe"
-                  ? "Add one item at a time. A clear garment photo works best for Try On."
+                  ? "Snap or pick one item. We’ll name and sort it for you."
                   : "Paste a link or add a screenshot. Social posts may not provide a preview; your source link is still saved."}
               </Body>
               {query.data?.explore_image && (
@@ -281,15 +287,28 @@ export default function LibraryEditor() {
                   }}
                 />
               )}
-              <Button
-                secondary
-                icon="image"
-                title={
-                  imageUri ? "Replace photo" : "Choose photo or screenshot"
-                }
-                disabled={busy}
-                onPress={() => void choose()}
-              />
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {Platform.OS !== "web" && (
+                  <View style={{ flex: 1 }}>
+                    <Button
+                      secondary
+                      icon="camera"
+                      title="Take photo"
+                      disabled={busy}
+                      onPress={() => void choose(true)}
+                    />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Button
+                    secondary
+                    icon="image"
+                    title="Gallery"
+                    disabled={busy}
+                    onPress={() => void choose()}
+                  />
+                </View>
+              </View>
               {!!imageUri && (
                 <Button
                   secondary
@@ -301,11 +320,7 @@ export default function LibraryEditor() {
                   }}
                 />
               )}
-              <Body style={{ fontSize: 13 }}>
-                Uploads happen only when you press Save. Saving uses no AI
-                credits.
-              </Body>
-              <Body>Name *</Body>
+              <Body>Name · optional</Body>
               <TextInput
                 accessibilityLabel="Item name"
                 value={name}
@@ -316,82 +331,23 @@ export default function LibraryEditor() {
                 editable={!busy}
                 style={field}
               />
-              <Body>Category</Body>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {categories.map((item) => (
-                  <CategoryChip
-                    key={item}
-                    label={item}
-                    selected={category === item}
-                    onPress={() => {
-                      if (!busy) setCategory(item);
-                    }}
+              {kind === "inspiration" && (
+                <>
+                  <Body>Link · optional with a photo</Body>
+                  <TextInput
+                    accessibilityLabel="Source link"
+                    value={url}
+                    onChangeText={setUrl}
+                    placeholder="https://…"
+                    placeholderTextColor={colors.placeholder}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                    maxLength={2048}
+                    editable={!busy}
+                    style={field}
                   />
-                ))}
-              </ScrollView>
-              <Body>
-                Source link{" "}
-                {kind === "inspiration"
-                  ? "· optional with a photo"
-                  : "· optional"}
-              </Body>
-              <TextInput
-                accessibilityLabel="Source link"
-                value={url}
-                onChangeText={setUrl}
-                placeholder="https://…"
-                placeholderTextColor={colors.placeholder}
-                autoCapitalize="none"
-                keyboardType="url"
-                maxLength={2048}
-                editable={!busy}
-                style={field}
-              />
-              <Body>Color · optional</Body>
-              <TextInput
-                accessibilityLabel="Color"
-                value={color}
-                onChangeText={setColor}
-                placeholder="e.g. Light blue"
-                maxLength={50}
-                editable={!busy}
-                style={field}
-              />
-              <Body>Brand · optional</Body>
-              <TextInput
-                accessibilityLabel="Brand"
-                value={brand}
-                onChangeText={setBrand}
-                placeholder="Brand name"
-                maxLength={100}
-                editable={!busy}
-                style={field}
-              />
-              <Body>Tags · optional</Body>
-              <TextInput
-                accessibilityLabel="Tags"
-                value={tags}
-                onChangeText={setTags}
-                placeholder="e.g. summer, casual, weekend"
-                maxLength={200}
-                editable={!busy}
-                style={field}
-              />
-              <Body>Notes · optional</Body>
-              <TextInput
-                accessibilityLabel="Notes"
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="What do you love about this look?"
-                maxLength={2000}
-                multiline
-                editable={!busy}
-                style={[field, { minHeight: 110, textAlignVertical: "top" }]}
-              />
+                </>
+              )}
               {!!error && (
                 <Body
                   style={{

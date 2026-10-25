@@ -37,6 +37,7 @@ import {
   cleanStyled,
   rateFit,
   checkPhoto,
+  labelGarment,
   type ClosetItem,
 } from "../_shared/stylist.ts";
 
@@ -833,7 +834,7 @@ Deno.serve(async (req) => {
       });
       return reply({ type: photo.type, data: toBase64(photo.data) });
     }
-    if (["rate", "colors", "outfit"].includes(String(body.action))) {
+    if (["rate", "colors", "outfit", "label"].includes(String(body.action))) {
       if (!env("GEMINI_API_KEY")) throw new Error("PROVIDER_NOT_CONFIGURED");
       const key = env("GEMINI_API_KEY");
       if (body.action === "rate") {
@@ -849,6 +850,48 @@ Deno.serve(async (req) => {
           await db.from("try_on_jobs").update({ rating }).eq("id", job.id),
         );
         return reply({ rating });
+      }
+      if (body.action === "label") {
+        // Fills only what the person left blank; their own edits always win.
+        await rpc("battle_rate", { p_key: "label:" + owner, p_max: 60 });
+        const item = checked(
+          await db
+            .from("library_items")
+            .select("id,category,color,brand,photo_path")
+            .eq("id", String(body.id))
+            .eq("owner_id", owner)
+            .eq("kind", "wardrobe")
+            .maybeSingle(),
+        ) as {
+          id: string;
+          category: string;
+          color: string;
+          brand: string;
+          photo_path: string | null;
+        } | null;
+        if (!item?.photo_path) throw new Error("NOT_FOUND");
+        const file = await db.storage
+          .from("library-private")
+          .download(item.photo_path);
+        if (file.error || !file.data || file.data.size > MAX_IMAGE_BYTES)
+          throw new Error("NOT_FOUND");
+        const bytes = new Uint8Array(await file.data.arrayBuffer());
+        validateJpeg(bytes);
+        const label = await labelGarment(
+          key,
+          "data:image/jpeg;base64," + toBase64(bytes),
+        );
+        const update = {
+          ...(body.rename === true && label.name ? { name: label.name } : {}),
+          ...(item.category === "Other" ? { category: label.category } : {}),
+          ...(!item.color ? { color: label.color } : {}),
+          ...(!item.brand ? { brand: label.brand } : {}),
+        };
+        if (Object.keys(update).length)
+          checked(
+            await db.from("library_items").update(update).eq("id", item.id),
+          );
+        return reply({ label });
       }
       const profile = checked(
         await db

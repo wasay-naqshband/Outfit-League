@@ -94,10 +94,12 @@ export async function saveLibraryItem(
   removePhoto = false,
 ) {
   const { db, owner } = await client();
-  if (!fields.name.trim()) throw new Error("Give your item a name.");
   const values = {
     ...fields,
-    name: fields.name.trim(),
+    // No name? The AI labeler renames wardrobe items after their photo uploads.
+    name:
+      fields.name.trim() ||
+      (kind === "wardrobe" ? "New item" : "Saved inspiration"),
     source_url: cleanSourceUrl(fields.source_url ?? ""),
   };
   const id = existing?.id ?? randomUUID();

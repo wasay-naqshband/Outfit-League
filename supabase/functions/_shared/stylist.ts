@@ -385,3 +385,56 @@ export async function checkPhoto(
   if (out.clear === false) return "PHOTO_UNCLEAR";
   return null;
 }
+
+export const CLOSET_CATEGORIES = [
+  "Tops",
+  "Shirts",
+  "Hoodies",
+  "Jackets",
+  "Bottoms",
+  "Dresses",
+  "Shoes",
+  "Accessories",
+  "Other",
+] as const;
+// Closet photo → short name, category, colour and a visible brand, so people
+// only snap the item and the stylist still knows what it is.
+export async function labelGarment(
+  key: string,
+  garment: string,
+  request: typeof fetch = fetch,
+) {
+  const out = await ask(
+    key,
+    [
+      photo(garment),
+      {
+        text:
+          "Label the main clothing item in this photo for a wardrobe app: a short name (2 to 5 words, colour + item, e.g. 'Light blue denim jacket'), " +
+          "its category, its main colour in plain words, and the brand only if a logo or label is clearly readable (otherwise empty).",
+      },
+    ],
+    {
+      type: "OBJECT",
+      properties: {
+        name: str,
+        category: { type: "STRING", enum: [...CLOSET_CATEGORIES] },
+        color: str,
+        brand: str,
+      },
+      required: ["name", "category", "color", "brand"],
+    },
+    request,
+  );
+  const category = CLOSET_CATEGORIES.includes(
+    out.category as (typeof CLOSET_CATEGORIES)[number],
+  )
+    ? (out.category as string)
+    : "Other";
+  return {
+    name: line(out.name, 60),
+    category,
+    color: line(out.color, 50),
+    brand: line(out.brand, 100),
+  };
+}
