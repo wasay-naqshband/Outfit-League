@@ -59,12 +59,14 @@ export default function ScanTab() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [limited, setLimited] = useState(false);
   const startedAt = useRef(0);
   const opened = useRef(false);
 
   async function snap(camera: boolean) {
     if (busy) return;
     setError("");
+    setLimited(false);
     try {
       const picked = await pickPhoto(camera);
       if (!picked) return;
@@ -80,6 +82,7 @@ export default function ScanTab() {
         from: camera ? "camera" : "gallery",
       });
     } catch (e) {
+      setLimited(e instanceof Error && e.message === "SCAN_DAILY_LIMIT");
       // Server codes have no spaces; plain messages (camera, photo size) do.
       setError(
         e instanceof Error && e.message.includes(" ")
@@ -192,6 +195,14 @@ export default function ScanTab() {
           >
             {error}
           </Body>
+        )}
+        {limited && (
+          <Button
+            title="Get Pro"
+            onPress={() =>
+              router.push({ pathname: "/paywall", params: { source: "feature" } })
+            }
+          />
         )}
         {scan && photo && !busy && (
           <>

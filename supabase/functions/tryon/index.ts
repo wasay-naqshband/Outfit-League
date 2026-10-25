@@ -550,6 +550,7 @@ const exposed = new Set([
   "NO_CREDITS",
   "ACTIVE_JOB",
   "RATE_LIMIT",
+  "SCAN_DAILY_LIMIT",
   "IDEMPOTENCY_CONFLICT",
   "PROVIDER_NOT_CONFIGURED",
   "PROVIDER_BUSY",
@@ -827,9 +828,14 @@ Deno.serve(async (req) => {
         serper = env("SERPER_API_KEY");
       if (!key) throw new Error("PROVIDER_NOT_CONFIGURED");
       if (!uuid(body.id)) throw new Error("INVALID_REQUEST");
-      await rpc("battle_rate", {
+      // Free: 5 a day (the reason to go Pro); Pro: 60 a day. The hourly cap
+      // stops bursts either way.
+      const pro = await hasPro(owner);
+      await rpc("battle_rate", { p_key: "scan:" + owner, p_max: pro ? 40 : 5 });
+      await rpc("daily_rate", {
         p_key: "scan:" + owner,
-        p_max: (await hasPro(owner)) ? 40 : 10,
+        p_max: pro ? 60 : 5,
+        p_error: "SCAN_DAILY_LIMIT",
       });
       const asset: Asset = required(
         await db
@@ -849,7 +855,7 @@ Deno.serve(async (req) => {
           .eq("owner_id", owner)
           .eq("kind", "wardrobe")
           .order("created_at", { ascending: false })
-          .limit(150),
+          .limit(60),
       ]);
       const styles = (Array.isArray(body.styles) ? body.styles : [])
         .filter((x): x is string => typeof x === "string" && x.length <= 24)
@@ -1057,7 +1063,7 @@ Deno.serve(async (req) => {
         ? 401
         : code === "NOT_FOUND"
           ? 404
-          : code === "RATE_LIMIT"
+          : code === "RATE_LIMIT" || code === "SCAN_DAILY_LIMIT"
             ? 429
             : 400,
     );

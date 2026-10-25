@@ -87,6 +87,8 @@ export const errorMessages: Record<string, string> = {
   ACTIVE_JOB:
     "You already have a try-on in progress. Open your recent try-ons to resume it.",
   RATE_LIMIT: "That’s a few too many requests. Please try again later.",
+  SCAN_DAILY_LIMIT:
+    "You’ve used today’s 5 free scans. Pro gets 60 a day, or come back tomorrow.",
   INVALID_IMAGE:
     "We couldn’t read that photo. Please choose a clear JPEG image.",
   IMAGE_DIMENSIONS:
