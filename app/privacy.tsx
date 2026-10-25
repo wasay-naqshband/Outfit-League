@@ -23,7 +23,12 @@ export default function Privacy() {
           AI Stylist (Rate my fit, What should I wear?) sends only what you ask
           about to Google Gemini: that look, your style choices, or your closet
           item details; “Style me” then sends your saved try-on photo to OpenAI
-          to dress it. Pasting or sharing a store link makes our server open
+          to dress it. Scan sends the photo you snap to Google Gemini and Google
+          Lens to describe the piece and find it in stores, then deletes it;
+          the first scan also sends your saved try-on photo to Gemini once to
+          work out your colour season.
+          Saving a Closet photo sends it to Google Gemini once to name and
+          sort it. Pasting or sharing a store link makes our server open
           that page to find the product photo. If you save a try-on photo, it
           stays privately in your account for future try-ons until you delete it
           in Settings → Your try-on photo or delete your account. Browsing or
