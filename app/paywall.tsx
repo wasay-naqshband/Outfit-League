@@ -72,8 +72,12 @@ export default function Paywall() {
     return false;
   }
 
+  // Already on paid Pro: only the try-on pack is worth buying here.
+  const onPro =
+    !!wallet.data?.subscription_active && !wallet.data.subscription_trial;
+  const ownedPlan = onPro && selected !== "pack";
   async function purchase() {
-    if (!selectedPackage || loading) return;
+    if (!selectedPackage || loading || ownedPlan) return;
     const previousBalance = wallet.data?.available ?? 0;
     setLoading(true);
     setPurchaseMessage("");
@@ -88,7 +92,9 @@ export default function Paywall() {
           "Apple confirmed your purchase. Your benefits are syncing; check again shortly.",
         );
       }
-    } catch {
+    } catch (e) {
+      // Closing Apple's sheet isn't an error.
+      if ((e as { userCancelled?: boolean })?.userCancelled) return;
       setPurchaseMessage(
         "We couldn’t confirm the purchase. Check your App Store account before trying again.",
       );
@@ -325,13 +331,15 @@ export default function Paywall() {
             title={
               loading
                 ? "Connecting to Apple…"
-                : selectedPackage
-                  ? `Continue · ${price(selected, selected === "yearly" ? "$49.99/year" : selected === "monthly" ? "$9.99/month" : "$4.99")}`
-                  : purchasesAvailable()
-                    ? "This offer is being set up"
-                    : "Purchases aren’t configured yet"
+                : ownedPlan
+                  ? "You’re on Pro ✓"
+                  : selectedPackage
+                    ? `Continue · ${price(selected, selected === "yearly" ? "$49.99/year" : selected === "monthly" ? "$9.99/month" : "$4.99")}`
+                    : purchasesAvailable()
+                      ? "This offer is being set up"
+                      : "Purchases aren’t configured yet"
             }
-            disabled={!selectedPackage || loading}
+            disabled={!selectedPackage || loading || ownedPlan}
             style={{ minHeight: 60, borderRadius: 22, marginTop: 4 }}
             onPress={() => void purchase()}
           />
@@ -369,11 +377,7 @@ export default function Paywall() {
           >
             <Pressable
               accessibilityRole="link"
-              onPress={() =>
-                void Linking.openURL(
-                  "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
-                )
-              }
+              onPress={() => router.push("/terms")}
               style={{ minHeight: 44, justifyContent: "center" }}
             >
               <Body>Terms</Body>

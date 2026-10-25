@@ -15,17 +15,19 @@ export default function Privacy() {
         <Heading size={25}>You choose when AI runs.</Heading>
         <Body>
           Only an explicit Generate action, after choosing both images and
-          agreeing to the try-on consent, sends your selected photos to the
-          configured AI provider, Google Gemini. Completed results are copied
-          into private app storage. Tapping “Make 360° view” sends that look’s
-          AI result to Google Gemini to make a turning video. The AI Stylist
-          (Rate my fit, Your colours, What should I wear?) sends only what you
-          ask about to Google Gemini: that look, your saved try-on photo, or
-          your closet item details. Pasting or sharing a store link makes our
-          server open that page to find the product photo. If you save a try-on
-          photo, it stays privately in your account for future try-ons until you
-          delete it in Settings → Your try-on photo or delete your account.
-          Browsing or shopping a saved look does not run AI.
+          agreeing to the try-on consent, sends your selected photos to our AI
+          provider, OpenAI, to make the try-on image. Completed results are
+          copied into private app storage. Tapping “360° view” sends that look’s
+          AI result to Google Gemini to make a turning video. Before a try-on,
+          Google Gemini checks that your photo is a clear full-body photo. The
+          AI Stylist (Rate my fit, What should I wear?) sends only what you ask
+          about to Google Gemini: that look, your style choices, or your closet
+          item details; “Style me” then sends your saved try-on photo to OpenAI
+          to dress it. Pasting or sharing a store link makes our server open
+          that page to find the product photo. If you save a try-on photo, it
+          stays privately in your account for future try-ons until you delete it
+          in Settings → Your try-on photo or delete your account. Browsing or
+          shopping a saved look does not run AI.
         </Body>
         <Heading size={25}>Battle images become public by choice.</Heading>
         <Body>
@@ -45,10 +47,14 @@ export default function Privacy() {
         </Body>
         <Heading size={25}>Shopping & measurement.</Heading>
         <Body>
-          The current catalog is sample data. No payment provider or external
-          analytics service is connected. Future approved retailer links may
-          record the selected product and whether an affiliate link was used,
-          without attaching your private photos or account identity.
+          Similar lookalikes and Shop the look search Google Shopping (through
+          Serper) with a short text description, and Lookalikes sends that
+          clothing photo to Google Lens to find similar items. Store pages open
+          in your browser; some links may earn us a commission, without
+          attaching your private photos or account identity. Purchases are
+          handled by Apple; RevenueCat receives your purchase record and an
+          anonymous account ID so your plan and credits stay in sync. We never
+          see your card details. No external analytics service is connected.
         </Body>
         <Heading size={25}>Removing images.</Heading>
         <Body>
@@ -61,7 +67,7 @@ export default function Privacy() {
           may remain valid for up to five minutes. Provider-held copies are
           subject to the provider’s retention; account deletion cannot recall
           those copies. Contact wasayiqbal2@gmail.com for support or privacy
-          requests. Final policy wording still needs review before wider launch.
+          requests. See also our Terms of Use.
         </Body>
       </View>
     </Page>

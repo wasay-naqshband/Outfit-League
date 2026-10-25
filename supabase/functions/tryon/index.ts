@@ -35,6 +35,7 @@ import {
   styleOutfit,
   cleanStyled,
   rateFit,
+  checkPhoto,
   type ClosetItem,
 } from "../_shared/stylist.ts";
 
@@ -463,6 +464,15 @@ async function findLookalikes(job: Job): Promise<Lookalike[]> {
       : candidates,
   );
 }
+// The photo check runs before a credit is reserved. It fails open: a checker
+// outage or an unreadable answer never blocks a try-on.
+async function photoProblem(owner: string, person: string) {
+  const key = env("GEMINI_API_KEY");
+  if (!key) return null;
+  return await readInput(person, owner)
+    .then((uri) => checkPhoto(key, uri))
+    .catch(() => null);
+}
 async function hasPro(owner: string) {
   const subscription = checked(
     await db
@@ -508,6 +518,11 @@ const exposed = new Set([
   "LOOKALIKES_UNAVAILABLE",
   "LOOKALIKES_FAILED",
   "NO_SAVED_PHOTO",
+  "PHOTO_NO_PERSON",
+  "PHOTO_GROUP",
+  "PHOTO_SELFIE",
+  "PHOTO_CLOSE_UP",
+  "PHOTO_UNCLEAR",
 ]);
 Deno.serve(async (req) => {
   const headers = cors(req);
@@ -686,6 +701,8 @@ Deno.serve(async (req) => {
         (extra.length && providerName === "FASHN")
       )
         throw new Error("INVALID_REQUEST");
+      const problem = await photoProblem(owner, body.person);
+      if (problem) throw new Error(problem);
       const reserved = await rpc("reserve_tryon", {
         p_owner: owner,
         p_key: body.key,

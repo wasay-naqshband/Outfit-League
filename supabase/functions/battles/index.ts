@@ -5,6 +5,7 @@ import {
   validateJpeg,
   MAX_IMAGE_BYTES,
 } from "../_shared/domain.ts";
+import { objectionable } from "../_shared/profanity.ts";
 const env = (key: string) => Deno.env.get(key) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -156,15 +157,28 @@ async function view(
       ? Promise.all([player(row.owner_id), player(row.b_owner_id)])
       : null,
   ]);
-  const comments = ["published", "closed"].includes(row.status)
-    ? (checked(
+  const blocked = new Set(
+    (
+      checked(
         await db
-          .from("battle_comments")
-          .select("id,author_key,display_name,body,created_at")
-          .eq("battle_id", id)
-          .order("id", { ascending: false })
-          .limit(50),
-      ) ?? [])
+          .from("battle_blocks")
+          .select("blocked_key")
+          .eq("blocker_key", key),
+      ) ?? []
+    ).map((b) => b.blocked_key),
+  );
+  const comments = ["published", "closed"].includes(row.status)
+    ? (
+        checked(
+          await db
+            .from("battle_comments")
+            .select("id,author_key,display_name,body,created_at")
+            .eq("battle_id", id)
+            .eq("hidden", false)
+            .order("id", { ascending: false })
+            .limit(50),
+        ) ?? []
+      ).filter((c) => !blocked.has(c.author_key))
     : [];
   let voters: unknown[] = [];
   if (
@@ -275,6 +289,7 @@ Deno.serve(async (req) => {
         typeof body.title !== "string" ||
         body.title.trim().length < 1 ||
         body.title.length > 100 ||
+        objectionable(body.title) ||
         !["anonymous", "public"].includes(String(body.mode)) ||
         !["choose", "versus"].includes(String(body.kind)) ||
         sources.length < 1 ||
@@ -380,7 +395,10 @@ Deno.serve(async (req) => {
         p_id: id,
         p_key: key,
         p_choice: body.choice,
-        p_name: typeof body.name === "string" ? body.name.slice(0, 40) : null,
+        p_name:
+          typeof body.name === "string" && !objectionable(body.name)
+            ? body.name.slice(0, 40)
+            : null,
         p_authenticated: !!owner && body.publicConsent === true,
       });
       return reply(await view(id, owner, key, 0));
@@ -395,6 +413,8 @@ Deno.serve(async (req) => {
         body.body.length > 280
       )
         throw new Error("INVALID_REQUEST");
+      if (objectionable(body.name + " " + body.body))
+        throw new Error("COMMENT_NOT_ALLOWED");
       await rpc("add_battle_comment", {
         p_id: id,
         p_key: key,
@@ -411,6 +431,17 @@ Deno.serve(async (req) => {
         p_key: key,
         p_comment: body.commentId,
       });
+      return reply(await view(id, owner, key, 0));
+    }
+    if (body.action === "report-comment" || body.action === "block") {
+      if (!Number.isSafeInteger(body.commentId))
+        throw new Error("INVALID_REQUEST");
+      await rpc(
+        body.action === "block"
+          ? "block_comment_author"
+          : "report_battle_comment",
+        { p_comment: body.commentId, p_key: key },
+      );
       return reply(await view(id, owner, key, 0));
     }
     if (body.action === "report") {
@@ -443,6 +474,7 @@ Deno.serve(async (req) => {
       "VOTING_CLOSED",
       "PUBLISH_CONSENT_REQUIRED",
       "INVALID_STATE",
+      "COMMENT_NOT_ALLOWED",
     ].includes(message)
       ? message
       : "REQUEST_FAILED";

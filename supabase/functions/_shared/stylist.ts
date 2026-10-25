@@ -332,3 +332,56 @@ export async function scoreLookalikes(
   }
   return scores;
 }
+
+// Before a try-on spends a credit: one person, face visible, framed to show
+// clothes, clear enough to see them. Lenient on purpose: knee-up and mirror
+// photos with a visible face pass.
+export type PhotoProblem =
+  | "PHOTO_NO_PERSON"
+  | "PHOTO_GROUP"
+  | "PHOTO_SELFIE"
+  | "PHOTO_CLOSE_UP"
+  | "PHOTO_UNCLEAR";
+export async function checkPhoto(
+  key: string,
+  person: string,
+  request: typeof fetch = fetch,
+): Promise<PhotoProblem | null> {
+  const out = await ask(
+    key,
+    [
+      photo(person),
+      {
+        text:
+          "This photo will be used for a virtual clothing try-on. Report: how many people are clearly visible; " +
+          "whether a phone, hand or object hides most of the face; the framing (full_body = head to feet, " +
+          "knees_up, waist_up, head_only = face or head and shoulders); whether it is an arm's-length front-camera selfie; " +
+          "and whether the clothes can be made out (clear = false only if it is so blurry or dark that you cannot tell what they are wearing; night or moody photos with visible clothes are clear).",
+      },
+    ],
+    {
+      type: "OBJECT",
+      properties: {
+        people: { type: "INTEGER" },
+        faceHidden: { type: "BOOLEAN" },
+        framing: {
+          type: "STRING",
+          enum: ["full_body", "knees_up", "waist_up", "head_only"],
+        },
+        armSelfie: { type: "BOOLEAN" },
+        clear: { type: "BOOLEAN" },
+      },
+      required: ["people", "faceHidden", "framing", "armSelfie", "clear"],
+    },
+    request,
+  );
+  const people = Number(out.people);
+  if (people === 0) return "PHOTO_NO_PERSON";
+  if (people > 1) return "PHOTO_GROUP";
+  if (out.faceHidden === true) return "PHOTO_SELFIE";
+  if (out.framing === "head_only") return "PHOTO_CLOSE_UP";
+  if (out.armSelfie === true && out.framing !== "full_body")
+    return "PHOTO_SELFIE";
+  if (out.clear === false) return "PHOTO_UNCLEAR";
+  return null;
+}

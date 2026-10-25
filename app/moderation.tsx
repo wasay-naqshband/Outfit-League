@@ -8,6 +8,14 @@ import { useApp } from "../src/lib/state";
 type Reports = {
   reports: { battle_id: string; reason: string; created_at: string }[];
   battles: { id: string; title: string; status: string }[];
+  comments: {
+    id: number;
+    battle_id: string;
+    display_name: string;
+    body: string;
+    hidden: boolean;
+    reports: number;
+  }[];
 };
 export default function Moderation() {
   const { session } = useApp();
@@ -20,6 +28,18 @@ export default function Moderation() {
     enabled: !!session,
     retry: false,
   });
+  async function removeComment(id: number) {
+    setBusy(true);
+    try {
+      await accountAction({ action: "remove-comment", id });
+      await query.refetch();
+      setMessage("Comment removed.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Please retry.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function hide(id: string) {
     setBusy(true);
     try {
@@ -41,7 +61,8 @@ export default function Moderation() {
       <View style={{ padding: 20, gap: 16 }}>
         <Body>
           Restricted to administrators explicitly appointed by the server
-          operator. Reports do not automatically hide content.
+          operator. Battles stay up until you hide them; a comment hides itself
+          after two reports until you remove it.
         </Body>
         {!session ? (
           <Button title="Sign in" onPress={() => router.push("/auth")} />
@@ -61,7 +82,34 @@ export default function Moderation() {
             {!query.data?.reports.length && (
               <Body>No reports in the latest review queue.</Body>
             )}
-            <Body>Latest 50 reports, newest first.</Body>
+            {!!query.data?.comments?.length && (
+              <Heading size={20}>Reported comments</Heading>
+            )}
+            {query.data?.comments?.map((c) => (
+              <View
+                key={c.id}
+                style={{
+                  padding: 16,
+                  borderRadius: 22,
+                  backgroundColor: "white",
+                  gap: 8,
+                }}
+              >
+                <Body>
+                  {c.display_name}: “{c.body}”
+                </Body>
+                <Body style={{ fontSize: 13 }}>
+                  {c.reports} report{c.reports === 1 ? "" : "s"}
+                  {c.hidden ? " · hidden" : ""}
+                </Body>
+                <Button
+                  title="Remove comment"
+                  disabled={busy}
+                  onPress={() => void removeComment(c.id)}
+                />
+              </View>
+            ))}
+            <Body>Latest 50 battle reports, newest first.</Body>
             {query.data?.battles.map((b) => (
               <View
                 key={b.id}

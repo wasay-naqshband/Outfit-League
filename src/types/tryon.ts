@@ -62,6 +62,17 @@ export const isTerminal = (status: JobStatus) =>
   status === "completed" || status === "failed";
 export const errorMessages: Record<string, string> = {
   UNAUTHORIZED: "Please sign in again to continue.",
+  // Photo check (no credit was used): each says how to fix the photo.
+  PHOTO_NO_PERSON:
+    "We couldn’t find a person in your photo. Use a full-body photo of yourself. No credit was used.",
+  PHOTO_GROUP:
+    "Your photo has more than one person. Use a photo of just you. No credit was used.",
+  PHOTO_SELFIE:
+    "That looks like a selfie with your face hidden. Use a full-body photo where your face shows, taken by a friend or with a timer. No credit was used.",
+  PHOTO_CLOSE_UP:
+    "Your photo is too close up. Use a photo that shows you at least down to the knees. No credit was used.",
+  PHOTO_UNCLEAR:
+    "Your photo is too blurry or dark to see your clothes. Try a sharper photo in good light. No credit was used.",
   NO_CREDITS:
     "You don’t have enough credits for this try-on. Each outfit piece uses one credit.",
   LINK_FAILED:

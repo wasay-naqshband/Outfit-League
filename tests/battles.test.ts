@@ -35,6 +35,12 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      "supabase/migrations/202610260025_comment_safety.sql",
+      "utf8",
+    ),
+  );
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
   await db.query("insert into public.profiles values($1,null),($2,null)", [
     owner,
@@ -370,5 +376,46 @@ test("comments need a live battle; only the author or battle owner can delete", 
   );
   await assert.rejects(
     service("select public.add_battle_comment($1,'k1','Sam','   ')", [id]),
+  );
+});
+
+test("two reports hide a comment; blocking records the author for that viewer only", async () => {
+  const [j1, j2] = await jobs(owner, 2);
+  const id = await createN("choose", [j1!, j2!]);
+  await service(
+    "update public.battles set ready=true,a_path=id||'/a.jpg',b_path=id||'/b.jpg' where id=$1",
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+  await service("select public.add_battle_comment($1,'troll','Tro','meh')", [
+    id,
+  ]);
+  const c = (
+    await service("select id from public.battle_comments where battle_id=$1", [
+      id,
+    ])
+  ).rows[0]!.id;
+  const hidden = async () =>
+    (
+      await service("select hidden from public.battle_comments where id=$1", [
+        c,
+      ])
+    ).rows[0]!.hidden;
+  const report = (key: string) =>
+    service("select public.report_battle_comment($1,$2)", [c, key]);
+  await report("r1");
+  await report("r1"); // the same person twice still counts once
+  assert.equal(await hidden(), false);
+  await report("r2");
+  assert.equal(await hidden(), true);
+  await service("select public.block_comment_author($1,'r1')", [c]);
+  await service("select public.block_comment_author($1,'troll')", [c]); // not yourself
+  assert.deepEqual(
+    (await service("select blocker_key,blocked_key from public.battle_blocks"))
+      .rows,
+    [{ blocker_key: "r1", blocked_key: "troll" }],
+  );
+  await assert.rejects(
+    service("select public.report_battle_comment(999999,'r3')"),
   );
 });

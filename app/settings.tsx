@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
@@ -15,7 +15,6 @@ import { accountAction } from "../src/lib/account";
 import { useApp } from "../src/lib/state";
 import { supabase } from "../src/lib/supabase";
 import { useProfile, useWallet } from "../src/lib/queries";
-import { useOnboarding } from "../src/lib/onboarding";
 import { colors } from "../src/theme";
 import { Avatar } from "../src/components/Avatar";
 
@@ -93,7 +92,6 @@ export default function Settings() {
   const { session } = useApp();
   const profile = useProfile();
   const wallet = useWallet();
-  const onboarding = useOnboarding();
   // Same query as the moderation screen; the server refuses non-moderators.
   const isAdmin = useQuery({
     queryKey: ["moderation", session?.user.id],
@@ -134,6 +132,25 @@ export default function Settings() {
         {session && (
           <Group title="TRY-ONS">
             <Row
+              icon="zap"
+              label="Outfit League Pro"
+              value={
+                wallet.data?.subscription_active
+                  ? wallet.data.subscription_trial
+                    ? "Free trial"
+                    : "Active"
+                  : "Get Pro"
+              }
+              onPress={() =>
+                wallet.data?.subscription_active
+                  ? // Apple manages renewals and cancellation.
+                    void Linking.openURL(
+                      "https://apps.apple.com/account/subscriptions",
+                    )
+                  : router.push("/paywall")
+              }
+            />
+            <Row
               icon="sparkles"
               label="Credits"
               value={wallet.data ? `${wallet.data.available} left` : undefined}
@@ -154,22 +171,6 @@ export default function Settings() {
               label="Try-on history"
               onPress={() => router.push("/history")}
             />
-            {/* TEMPORARY for beta testing: remove before App Store release. */}
-            <Row
-              icon="refresh-cw"
-              label="Replay onboarding"
-              onPress={() => {
-                onboarding.update({
-                  step: 0,
-                  done: false,
-                  painPoints: [],
-                  styles: [],
-                  frequency: undefined,
-                  yearlyWaste: undefined,
-                });
-                router.push("/onboarding");
-              }}
-            />
           </Group>
         )}
 
@@ -178,6 +179,11 @@ export default function Settings() {
             icon="shield"
             label="Your photos & privacy"
             onPress={() => router.push("/privacy")}
+          />
+          <Row
+            icon="flag"
+            label="Terms of Use"
+            onPress={() => router.push("/terms")}
           />
           <Row
             icon="help-circle"

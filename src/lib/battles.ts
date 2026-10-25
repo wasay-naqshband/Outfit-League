@@ -70,6 +70,8 @@ const messages: Record<string, string> = {
   INVALID_SOURCE:
     "Choose two different available images from your own Closet or completed AI looks.",
   RATE_LIMIT: "Too many requests. Please try again later.",
+  COMMENT_NOT_ALLOWED:
+    "That comment breaks our community rules. Keep it kind and try again.",
   PUBLIC_IDENTITY_REQUIRED:
     "Sign in, enter a display name and agree to show your name and vote.",
   VOTING_CLOSED: "Voting is closed for this battle.",

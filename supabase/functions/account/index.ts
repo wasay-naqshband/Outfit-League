@@ -109,7 +109,34 @@ Deno.serve(async (req) => {
             await db.from("battles").select("id,title,status").in("id", ids),
           )
         : [];
-      return reply({ reports, battles });
+      // Reported comments, most reported first (two reports hide one).
+      const flagged = checked(
+        await db
+          .from("battle_comment_reports")
+          .select("comment_id,created_at")
+          .order("created_at", { ascending: false })
+          .limit(200),
+      );
+      const counts = new Map<number, number>();
+      for (const r of flagged ?? [])
+        counts.set(r.comment_id, (counts.get(r.comment_id) ?? 0) + 1);
+      const comments = counts.size
+        ? (
+            checked(
+              await db
+                .from("battle_comments")
+                .select("id,battle_id,display_name,body,hidden")
+                .in("id", [...counts.keys()]),
+            ) ?? []
+          )
+            .map((c) => ({ ...c, reports: counts.get(c.id) ?? 0 }))
+            .sort((a, b) => b.reports - a.reports)
+        : [];
+      return reply({ reports, battles, comments });
+    }
+    if (body.action === "remove-comment" && Number.isSafeInteger(body.id)) {
+      checked(await db.from("battle_comments").delete().eq("id", body.id));
+      return reply({ removed: true });
     }
     if (body.action === "hide" && uuid(body.id)) {
       checked(
