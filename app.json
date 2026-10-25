@@ -13,7 +13,9 @@
         "usesNonExemptEncryption": false
       },
       "entitlements": {
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       },
       "bundleIdentifier": "com.outfitleague.app"
     },
@@ -52,7 +54,10 @@
           },
           "android": {
             "enabled": true,
-            "singleShareMimeTypes": ["text/plain", "image/*"]
+            "singleShareMimeTypes": [
+              "text/plain",
+              "image/*"
+            ]
           }
         }
       ],
@@ -66,7 +71,8 @@
       ],
       "expo-web-browser",
       "expo-apple-authentication",
-      "expo-localization"
+      "expo-localization",
+      "./plugins/without-push-entitlement"
     ],
     "experiments": {
       "typedRoutes": true
