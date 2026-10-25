@@ -143,14 +143,14 @@ export default function Paywall() {
       id: "yearly",
       title: "Pro yearly",
       description:
-        "50 try-ons + 2 360° views each month · $4.17/month · save 58%",
+        "40 try-ons + 5 360° views each month · $4.17/month · save 58%",
       fallback: "$49.99",
       featured: true,
     },
     {
       id: "monthly",
       title: "Pro monthly",
-      description: "50 try-ons + 2 360° views each month",
+      description: "40 try-ons + 5 360° views each month",
       fallback: "$9.99",
     },
     {
@@ -321,7 +321,7 @@ export default function Paywall() {
 
           <View style={{ gap: 8, marginTop: 2 }}>
             {[
-              "Pro: store links and 2 included 360° views each month",
+              "Pro: store links and 5 included 360° views each month",
               "Free trials include try-ons; 360° views start with paid Pro",
               "One credit for each successful garment try-on",
               "Failed generations return the reserved credits",
@@ -360,7 +360,7 @@ export default function Paywall() {
               (selected === "monthly"
                 ? "Renews monthly at the App Store price. Any introductory offer and eligibility will be shown by Apple before purchase. A free trial includes try-ons only. Cancel in Apple settings."
                 : selected === "yearly"
-                  ? "Billed yearly. 50 try-ons and 2 included 360° views refresh monthly; unused monthly allowances expire."
+                  ? "Billed yearly. 40 try-ons and 5 included 360° views refresh monthly; unused monthly allowances expire."
                   : "One-time App Store purchase. Purchased try-ons never expire.")}
           </Body>
 

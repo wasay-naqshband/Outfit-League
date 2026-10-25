@@ -2,7 +2,7 @@
 
 The app grants three welcome credits. The one-time try-on pack is fifteen credits
 for $4.99. Planned Pro pricing is $9.99/month or
-$49.99/year. Both Pro plans refresh to 50 try-ons and two included 360° views
+$49.99/year. Both Pro plans refresh to 40 try-ons and five included 360° views
 each month. Unused monthly allowances expire at refresh; free and purchased
 credits do not. The App Store supplies localized prices. Supabase remains the
 credit ledger; the app never adds credits from a client purchase result.

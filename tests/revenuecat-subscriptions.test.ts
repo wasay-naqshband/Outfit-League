@@ -23,6 +23,7 @@ before(async () => {
     "202610230019_revenuecat_pack_15.sql",
     "202610230020_revenuecat_pro.sql",
     "202610240021_spin_pro_only.sql",
+    "202610260027_pro_allowance.sql",
   ]) {
     await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
   }
@@ -70,10 +71,10 @@ test("Pro grants monthly allowances separately and an included spin does not spe
     new Date(Date.now() + 3 * 86400000).toISOString(),
   );
   assert.deepEqual(await wallet(), {
-    available: 53,
+    available: 43,
     reserved: 0,
-    subscription_tryons: 50,
-    subscription_spins: 2,
+    subscription_tryons: 40,
+    subscription_spins: 5,
   });
 
   const person = await asset("person");
@@ -86,10 +87,10 @@ test("Pro grants monthly allowances separately and an included spin does not spe
     )
   ).rows[0].r.job;
   assert.deepEqual(await wallet(), {
-    available: 52,
+    available: 42,
     reserved: 1,
-    subscription_tryons: 49,
-    subscription_spins: 2,
+    subscription_tryons: 39,
+    subscription_spins: 5,
   });
   await db.query("select finish_tryon($1,$2,null)", [job.id, result]);
   const spin = (
@@ -108,10 +109,10 @@ test("Pro grants monthly allowances separately and an included spin does not spe
     "subscription",
   );
   assert.deepEqual(await wallet(), {
-    available: 52,
+    available: 42,
     reserved: 1,
-    subscription_tryons: 49,
-    subscription_spins: 1,
+    subscription_tryons: 39,
+    subscription_spins: 4,
   });
 });
 
@@ -145,7 +146,7 @@ test("a free trial includes try-ons only; 360° views need paid Pro", async () =
     [trial],
   );
   assert.deepEqual(w.rows[0], {
-    subscription_tryons: 50,
+    subscription_tryons: 40,
     subscription_spins: 0,
   });
   const add = async (kind: string) => {
