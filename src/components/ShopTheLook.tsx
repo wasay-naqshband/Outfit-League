@@ -11,7 +11,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Body, Button, Heading } from "./ui";
 import { ProductCard } from "./Lookalikes";
 import { analytics } from "../lib/analytics";
-import { pieceLink, shopPiece, type OutfitPiece } from "../lib/tryon-api";
+import {
+  pieceLink,
+  shopPiece,
+  type Lookalike,
+  type OutfitPiece,
+} from "../lib/tryon-api";
 import { friendlyError, type TryOnJob } from "../types/tryon";
 import { colors, fonts, shadow } from "../theme";
 
@@ -25,7 +30,16 @@ export const PART_LABEL: Record<OutfitPiece["part"], string> = {
 
 // One piece: its name, then up to three store options (closest match,
 // cheapest, next closest), each with its real photo, price and Shop.
-function PieceOptions({ piece }: { piece: OutfitPiece }) {
+// `items` given (Scan) skips the search; `heading` replaces the part label.
+export function PieceOptions({
+  piece,
+  items: given,
+  heading,
+}: {
+  piece: OutfitPiece;
+  items?: Lookalike[];
+  heading?: string;
+}) {
   const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
   const shop = useQuery({
@@ -33,9 +47,11 @@ function PieceOptions({ piece }: { piece: OutfitPiece }) {
     queryFn: () => shopPiece(piece.query),
     staleTime: Infinity,
     retry: false,
+    enabled: !given,
   });
-  const items = shop.data?.items ?? [];
-  if (!shop.isPending && !items.length) return null;
+  const items = given ?? shop.data?.items ?? [];
+  const pending = !given && shop.isPending;
+  if (!pending && !items.length) return null;
   const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
   async function open(index: number) {
     const item = items[index];
@@ -62,13 +78,13 @@ function PieceOptions({ piece }: { piece: OutfitPiece }) {
             color: colors.text3,
           }}
         >
-          {PART_LABEL[piece.part].toUpperCase()}
+          {(heading ?? PART_LABEL[piece.part]).toUpperCase()}
         </Text>
         <Text style={{ fontFamily: fonts.medium, fontSize: 15 }}>
           {piece.name}
         </Text>
       </View>
-      {shop.isPending ? (
+      {pending ? (
         <View
           style={{
             height: 120,

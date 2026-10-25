@@ -163,3 +163,32 @@ export const shopPiece = (query: string) =>
   callTryOn<{ items: Lookalike[] }>({ action: "shop-piece", query });
 export const pieceLink = (item: Lookalike) =>
   callTryOn<{ url: string }>({ action: "piece-link", item });
+export type Scan = {
+  name: string;
+  category: string;
+  colors: { name: string; hex: string }[];
+  details: string[];
+  vibe: string;
+  vibeLine: string;
+  price: string;
+  query: string;
+  /** 1–10: how well it suits them (colour season + style) */
+  score: number;
+  verdict: string;
+  /** Closet pieces it goes with */
+  pairs: { id: string; name: string }[];
+  idea: string;
+};
+// Scan tab: the photo is uploaded privately, read, then removed.
+export async function scanPhoto(photo: LocalPhoto, styles: string[]) {
+  const id = await uploadPhoto(photo, "garment");
+  try {
+    return await callTryOn<{ scan: Scan; items: Lookalike[] }>({
+      action: "scan",
+      id,
+      styles,
+    });
+  } finally {
+    void callTryOn({ action: "remove-upload", id }).catch(() => {});
+  }
+}

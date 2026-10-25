@@ -18,6 +18,7 @@ export type AnalyticsEvents = {
   lookalike_clicked: { badge: "closest" | "cheapest" | "other" };
   spin_started: { plan: "pro" };
   look_rated: { source: "ai" };
+  scan_completed: { from: "camera" | "gallery" };
   notification_opened: {
     kind: "look_ready" | "battle" | "trial" | "comeback";
   };
@@ -58,6 +59,7 @@ const allowed: {
   lookalike_clicked: { badge: ["closest", "cheapest", "other"] },
   spin_started: { plan: ["pro"] },
   look_rated: { source: ["ai"] },
+  scan_completed: { from: ["camera", "gallery"] },
   notification_opened: {
     kind: ["look_ready", "battle", "trial", "comeback"],
   },

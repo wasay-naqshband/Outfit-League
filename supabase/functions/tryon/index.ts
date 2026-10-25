@@ -38,6 +38,7 @@ import {
   rateFit,
   checkPhoto,
   labelGarment,
+  scanItem,
   type ClosetItem,
 } from "../_shared/stylist.ts";
 
@@ -489,6 +490,31 @@ async function photoProblem(owner: string, person: string) {
     .then((uri) => checkPhoto(key, uri))
     .catch(() => null);
 }
+// Their colour season: saved, or worked out once from their saved try-on
+// photo. Empty when they have neither; Scan still works without it.
+async function myPalette(owner: string, key: string) {
+  const profile = checked(
+    await db.from("profiles").select("color_profile").eq("id", owner).single(),
+  ) as { color_profile: { season?: string; best?: { name: string }[] } | null };
+  if (profile.color_profile) return profile.color_profile;
+  try {
+    const saved = await db.storage
+      .from("saved-photos")
+      .download(owner + "/person.jpg");
+    if (saved.error || !saved.data || saved.data.size > MAX_IMAGE_BYTES)
+      return {};
+    const bytes = new Uint8Array(await saved.data.arrayBuffer());
+    validateJpeg(bytes);
+    const colors = await colorAnalysis(
+      key,
+      "data:image/jpeg;base64," + toBase64(bytes),
+    );
+    await db.from("profiles").update({ color_profile: colors }).eq("id", owner);
+    return colors;
+  } catch {
+    return {};
+  }
+}
 async function hasPro(owner: string) {
   const subscription = checked(
     await db
@@ -794,6 +820,68 @@ Deno.serve(async (req) => {
         );
       }
       return reply({ url });
+    }
+    if (body.action === "scan") {
+      // Scan tab: one photo → what it is, how it suits them, where to buy it.
+      const key = env("GEMINI_API_KEY"),
+        serper = env("SERPER_API_KEY");
+      if (!key) throw new Error("PROVIDER_NOT_CONFIGURED");
+      if (!uuid(body.id)) throw new Error("INVALID_REQUEST");
+      await rpc("battle_rate", {
+        p_key: "scan:" + owner,
+        p_max: (await hasPro(owner)) ? 40 : 10,
+      });
+      const asset: Asset = required(
+        await db
+          .from("private_assets")
+          .select("*")
+          .eq("id", body.id)
+          .eq("owner_id", owner)
+          .single(),
+      );
+      const [spotted, signed, palette, closet] = await Promise.all([
+        readInput(asset.id, owner),
+        bucket.createSignedUrl(asset.path, 300),
+        myPalette(owner, key),
+        db
+          .from("library_items")
+          .select("id,name,category,color,brand,tags")
+          .eq("owner_id", owner)
+          .eq("kind", "wardrobe")
+          .order("created_at", { ascending: false })
+          .limit(150),
+      ]);
+      const styles = (Array.isArray(body.styles) ? body.styles : [])
+        .filter((x): x is string => typeof x === "string" && x.length <= 24)
+        .slice(0, 6);
+      // Lens (exact look) runs alongside the AI read; shopping needs its query.
+      const [scan, visual] = await Promise.all([
+        scanItem(
+          key,
+          spotted,
+          {
+            season: palette.season ?? "",
+            best: (palette.best ?? []).map((c) => c.name).slice(0, 8),
+            styles,
+          },
+          (closet.data ?? []) as ClosetItem[],
+        ),
+        serper && signed.data
+          ? lens(serper, signed.data.signedUrl).catch(() => ({
+              items: [] as Lookalike[],
+              queries: [],
+            }))
+          : { items: [] as Lookalike[], queries: [] },
+      ]);
+      const priced =
+        serper && scan.query
+          ? await shopping(serper, scan.query).catch(() => [] as Lookalike[])
+          : [];
+      return reply({
+        scan,
+        // Visual matches first, so "Best match" is the closest look.
+        items: pieceOptions([...visual.items.slice(0, 3), ...priced]),
+      });
     }
     if (body.action === "shop-piece" || body.action === "piece-link") {
       const serper = env("SERPER_API_KEY");

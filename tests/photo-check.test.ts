@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkPhoto, labelGarment } from "../supabase/functions/_shared/stylist.ts";
+import { checkPhoto, labelGarment, scanItem } from "../supabase/functions/_shared/stylist.ts";
 import { objectionable } from "../supabase/functions/_shared/profanity.ts";
 
 const answer = (out: Record<string, unknown>) =>
@@ -66,4 +66,31 @@ test("closet labeler: keeps bounded fields and a known category", async () => {
     color: "light blue",
     brand: "",
   });
+});
+
+test("scan: clamps the score and keeps only real closet pairs", async () => {
+  const scan = await scanItem(
+    "k",
+    uri,
+    { season: "Soft Autumn", best: ["olive"], styles: [] },
+    [{ id: "a", name: "Black cargos", category: "Bottoms", color: "black", brand: "", tags: "" }],
+    answer({
+      name: "Olive bomber jacket",
+      category: "Jackets",
+      colors: [{ name: "Olive", hex: "#556B2F" }, { name: "Bad", hex: "olive" }],
+      details: ["Nylon shell"],
+      vibe: "Streetwear",
+      vibeLine: "Instant edge.",
+      price: "$60–90",
+      query: "olive nylon bomber jacket men",
+      score: 14,
+      verdict: "Olive sits right in your Soft Autumn palette.",
+      pairs: ["a", "made-up"],
+      idea: "Wear it over a white tee.",
+    }),
+  );
+  assert.equal(scan.score, 10);
+  assert.deepEqual(scan.colors, [{ name: "Olive", hex: "#556B2F" }]);
+  assert.deepEqual(scan.pairs, [{ id: "a", name: "Black cargos" }]);
+  assert.equal(scan.category, "Jackets");
 });

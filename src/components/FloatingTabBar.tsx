@@ -7,6 +7,7 @@ import { colors as c, fonts, shadow } from "../theme";
 export const tabs = [
   { label: "Explore", icon: "compass", href: "/(tabs)" },
   { label: "Try On", icon: "sparkles", href: "/(tabs)/try-on" },
+  { label: "Scan", icon: "camera", href: "/(tabs)/scan" },
   { label: "Battles", icon: "zap", href: "/(tabs)/battles" },
   { label: "Closet", icon: "hanger", href: "/(tabs)/closet" },
 ] as const;

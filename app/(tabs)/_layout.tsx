@@ -4,6 +4,7 @@ import { FloatingTabBar } from "../../src/components/FloatingTabBar";
 const labels: Record<string, string> = {
   index: "Explore",
   "try-on": "Try On",
+  scan: "Scan",
   battles: "Battles",
   closet: "Closet",
 };
@@ -31,6 +32,7 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="try-on" />
+      <Tabs.Screen name="scan" />
       <Tabs.Screen name="battles" />
       <Tabs.Screen name="closet" />
     </Tabs>

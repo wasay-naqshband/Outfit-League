@@ -438,3 +438,96 @@ export async function labelGarment(
     brand: line(out.brand, 100),
   };
 }
+
+// Scan: a piece spotted in the wild → what it is, its colours, the aesthetic
+// it gives off, and how well it suits this person (their colour season, their
+// styles, what's already in their closet).
+export async function scanItem(
+  key: string,
+  spotted: string,
+  me: { season: string; best: string[]; styles: string[] },
+  closet: ClosetItem[],
+  request: typeof fetch = fetch,
+) {
+  const listing = closet
+    .map((item) => `${item.id} | ${item.name} | ${item.color || "-"}`)
+    .join("\n");
+  const byId = new Map(closet.map((item) => [item.id, item.name]));
+  const out = await ask(
+    key,
+    [
+      photo(spotted),
+      {
+        text:
+          "Someone spotted this and snapped it. Identify the single most noticeable clothing item or accessory: a concrete name (colour + fabric/finish + item, e.g. 'light-wash straight-leg jeans'), " +
+          "its category, its 1 to 3 main colours with hex codes, and up to 4 short details (fabric, fit, cut, standout detail). " +
+          "Name the aesthetic it gives off in 1 to 3 words (e.g. Old money, Streetwear, Quiet luxury, Y2K, Gorpcore, Minimal) and one punchy line on what it does for a look. " +
+          "Give a typical US price range like '$40–80'. Give a US shopping query (4 to 8 words, no brand unless the logo is clearly readable). " +
+          (me.season
+            ? `Their colour season: ${me.season}; their best colours: ${me.best.join(", ") || "-"}. `
+            : "Their colour season is unknown. ") +
+          (me.styles.length ? `Their style: ${me.styles.join(", ")}. ` : "") +
+          "Score 1 to 10 how well this piece suits them on colour and style only (never body or looks), with a one-line reason that mentions their colours or style. " +
+          (listing
+            ? `Their closet (id | name | colour):\n${listing}\nPick up to 3 closet ids that pair well with it. `
+            : "") +
+          "Add one short styling idea for wearing it.",
+      },
+    ],
+    {
+      type: "OBJECT",
+      properties: {
+        name: str,
+        category: { type: "STRING", enum: [...CLOSET_CATEGORIES] },
+        colors: swatches,
+        details: list,
+        vibe: str,
+        vibeLine: str,
+        price: str,
+        query: str,
+        score: { type: "INTEGER" },
+        verdict: str,
+        pairs: list,
+        idea: str,
+      },
+      required: [
+        "name",
+        "category",
+        "colors",
+        "details",
+        "vibe",
+        "vibeLine",
+        "price",
+        "query",
+        "score",
+        "verdict",
+        "pairs",
+        "idea",
+      ],
+    },
+    request,
+  );
+  const score = Math.round(Number(out.score));
+  return {
+    name: line(out.name, 80),
+    category: CLOSET_CATEGORIES.includes(
+      out.category as (typeof CLOSET_CATEGORIES)[number],
+    )
+      ? (out.category as string)
+      : "Other",
+    colors: colors(out.colors).slice(0, 3),
+    details: lines(out.details, 4),
+    vibe: line(out.vibe, 30),
+    vibeLine: line(out.vibeLine, 140),
+    price: line(out.price, 20),
+    query: line(out.query, 90),
+    score: Number.isFinite(score) ? Math.min(10, Math.max(1, score)) : 7,
+    verdict: line(out.verdict, 160),
+    pairs: (Array.isArray(out.pairs) ? out.pairs : [])
+      .map(String)
+      .filter((id) => byId.has(id))
+      .slice(0, 3)
+      .map((id) => ({ id, name: byId.get(id)! })),
+    idea: line(out.idea, 160),
+  };
+}
