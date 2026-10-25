@@ -69,7 +69,5 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        beta_groups:
-          - Owner beta
+        submit_to_testflight: false
         submit_to_app_store: false
