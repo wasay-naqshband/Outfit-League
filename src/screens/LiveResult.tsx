@@ -28,6 +28,7 @@ import { ShopTheLook } from "../components/ShopTheLook";
 import { sharePreview } from "../lib/share-image";
 import { friendlyError } from "../types/tryon";
 import { outOfCredits } from "../lib/credits";
+import { analytics } from "../lib/analytics";
 import { colors, gradients, shadow } from "../theme";
 
 export default function LiveResult({ id }: { id: string }) {
@@ -98,6 +99,7 @@ export default function LiveResult({ id }: { id: string }) {
         ["tryon-job", session?.user.id, id],
         await startSpin(id),
       );
+      analytics.track("spin_started", { plan: "pro" });
       await client.invalidateQueries({ queryKey: ["wallet"] });
     } catch (e) {
       if (e instanceof Error && e.message === "PRO_REQUIRED") needPro();
@@ -114,6 +116,7 @@ export default function LiveResult({ id }: { id: string }) {
     setError("");
     try {
       const { rating } = await rateLook(id);
+      analytics.track("look_rated", { source: "ai" });
       client.setQueryData(
         ["tryon-job", session?.user.id, id],
         (old: typeof view) => old && { ...old, job: { ...old.job, rating } },

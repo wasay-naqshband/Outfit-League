@@ -7,6 +7,7 @@ import { Body, Button, Heading, Icon, RoundButton } from "../src/components/ui";
 import { colors, fonts, gradients, shadow } from "../src/theme";
 import { useWallet } from "../src/lib/queries";
 import { useApp } from "../src/lib/state";
+import { analytics } from "../src/lib/analytics";
 import {
   buyPackage,
   getPurchaseOptions,
@@ -36,6 +37,11 @@ export default function Paywall() {
   const [loading, setLoading] = useState(false);
   const [purchaseMessage, setPurchaseMessage] = useState("");
 
+  useEffect(() => {
+    analytics.track("paywall_opened", {
+      source: source === "credits" || source === "feature" ? source : "direct",
+    });
+  }, [source]);
   useEffect(() => {
     if (!purchasesAvailable() || !session) return;
     void identifyPurchasesUser(session.user.id)
@@ -83,6 +89,7 @@ export default function Paywall() {
     setPurchaseMessage("");
     try {
       await buyPackage(selectedPackage);
+      analytics.track("purchase_completed", { plan: selected });
       const confirmed = await refreshUntilConfirmed(selected, previousBalance);
       if (confirmed) {
         setPurchaseMessage("Your Outfit League plan is ready.");
@@ -95,6 +102,7 @@ export default function Paywall() {
     } catch (e) {
       // Closing Apple's sheet isn't an error.
       if ((e as { userCancelled?: boolean })?.userCancelled) return;
+      analytics.track("purchase_failed", { plan: selected });
       setPurchaseMessage(
         "We couldn’t confirm the purchase. Check your App Store account before trying again.",
       );

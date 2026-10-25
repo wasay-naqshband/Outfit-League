@@ -1,5 +1,27 @@
-// No analytics provider is connected. Only explicit, non-personal fields may reach a future sink.
+// Only the events and values listed here can be sent (to PostHog, wired in
+// posthog.ts): never photos, text, emails or links.
+const STEPS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"] as const;
+const PLANS = ["yearly", "monthly", "pack"] as const;
 export type AnalyticsEvents = {
+  onboarding_step: { step: (typeof STEPS)[number] };
+  paywall_opened: { source: "credits" | "feature" | "direct" };
+  purchase_completed: { plan: (typeof PLANS)[number] };
+  purchase_failed: { plan: (typeof PLANS)[number] };
+  photo_rejected: {
+    reason: "no_person" | "group" | "selfie" | "close_up" | "unclear";
+  };
+  stylist_styled: { from: "ideas" | "closet" };
+  shop_look_clicked: {
+    part: "top" | "layer" | "bottoms" | "shoes" | "accessory";
+  };
+  lookalikes_requested: { from: "result" };
+  lookalike_clicked: { badge: "closest" | "cheapest" | "other" };
+  spin_started: { plan: "pro" };
+  look_rated: { source: "ai" };
+  notification_opened: {
+    kind: "look_ready" | "battle" | "trial" | "comeback";
+  };
+  notifications_answered: { allowed: "yes" | "no" };
   signup_completed: { method: "email" };
   onboarding_completed: { mode: "guest" | "account" };
   explore_outfit_opened: { collection: "sample" | "catalog" };
@@ -21,6 +43,25 @@ type Sink = (event: SafeEvent) => void | Promise<void>;
 const allowed: {
   [K in EventName]: Record<keyof AnalyticsEvents[K], readonly string[]>;
 } = {
+  onboarding_step: { step: STEPS },
+  paywall_opened: { source: ["credits", "feature", "direct"] },
+  purchase_completed: { plan: PLANS },
+  purchase_failed: { plan: PLANS },
+  photo_rejected: {
+    reason: ["no_person", "group", "selfie", "close_up", "unclear"],
+  },
+  stylist_styled: { from: ["ideas", "closet"] },
+  shop_look_clicked: {
+    part: ["top", "layer", "bottoms", "shoes", "accessory"],
+  },
+  lookalikes_requested: { from: ["result"] },
+  lookalike_clicked: { badge: ["closest", "cheapest", "other"] },
+  spin_started: { plan: ["pro"] },
+  look_rated: { source: ["ai"] },
+  notification_opened: {
+    kind: ["look_ready", "battle", "trial", "comeback"],
+  },
+  notifications_answered: { allowed: ["yes", "no"] },
   signup_completed: { method: ["email"] },
   onboarding_completed: { mode: ["guest", "account"] },
   explore_outfit_opened: { collection: ["sample", "catalog"] },
@@ -67,5 +108,24 @@ export function createAnalytics(sink?: Sink) {
   }
   return { track, reset: () => seen.clear(), enabled: !!sink };
 }
-// Deliberately no network, storage, console output, identifiers, or default telemetry.
-export const analytics = createAnalytics();
+// The sink is set once at startup (posthog.ts); until then events are dropped.
+let sink: Sink | undefined;
+export const setAnalyticsSink = (next: Sink) => {
+  sink = next;
+};
+export const analytics = createAnalytics((event) => sink?.(event));
+// The photo check's refusal codes, as analytics reasons.
+const PHOTO: Record<string, AnalyticsEvents["photo_rejected"]["reason"]> = {
+  PHOTO_NO_PERSON: "no_person",
+  PHOTO_GROUP: "group",
+  PHOTO_SELFIE: "selfie",
+  PHOTO_CLOSE_UP: "close_up",
+  PHOTO_UNCLEAR: "unclear",
+};
+export const trackPhotoProblem = (error: unknown) => {
+  const reason = PHOTO[error instanceof Error ? error.message : ""];
+  if (reason) analytics.track("photo_rejected", { reason });
+};
+// Screen names without IDs: "/generation/8f…" → "/generation/[id]".
+export const screenName = (path: string) =>
+  path.replace(/\/[0-9a-f-]{20,}(?=\/|$)/gi, "/[id]") || "/";

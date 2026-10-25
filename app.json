@@ -9,7 +9,9 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "config": { "usesNonExemptEncryption": false },
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "entitlements": {
         "com.apple.developer.applesignin": ["Default"]
       },
@@ -63,7 +65,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

@@ -15,6 +15,7 @@ import { LookPicker } from "../src/components/LookPicker";
 import { useApp } from "../src/lib/state";
 import { battleCall, shareBattleLink } from "../src/lib/battles";
 import { analytics } from "../src/lib/analytics";
+import { askForNotifications } from "../src/lib/notifications";
 import { colors, fonts } from "../src/theme";
 
 const PROMPTS = {
@@ -87,6 +88,7 @@ export default function CreateBattle() {
       analytics.track("battle_created", {
         voting_mode: mode === "Public" ? "public" : "anonymous",
       });
+      void askForNotifications(); // to hear about votes and comments
       router.replace({ pathname: "/battle/[id]", params: { id } });
       await shareBattleLink(
         id,

@@ -18,6 +18,8 @@ import { useSavedPhoto, useTryOnConfig, useWallet } from "../src/lib/queries";
 import { styleLabel, useOnboarding } from "../src/lib/onboarding";
 import { agreedOnce } from "../src/lib/consent";
 import { outOfCredits } from "../src/lib/credits";
+import { analytics, trackPhotoProblem } from "../src/lib/analytics";
+import { askForNotifications } from "../src/lib/notifications";
 import { callTryOn, pickOutfit, uploadPhoto } from "../src/lib/tryon-api";
 import { friendlyError, type JobView } from "../src/types/tryon";
 import { colors, fonts } from "../src/theme";
@@ -74,6 +76,7 @@ export default function Stylist() {
     try {
       const pick = await pickOutfit(request, styles, closet);
       if (!pick.outfit) return setEmptyCloset(true);
+      analytics.track("stylist_styled", { from: closet ? "closet" : "ideas" });
       const person = await uploadPhoto(saved.data, "person");
       const { pieces, title } = pick.outfit;
       const result = await callTryOn<JobView>({
@@ -86,6 +89,7 @@ export default function Stylist() {
         styled: { title, request, pieces },
         consent: "tryon-v1",
       });
+      void askForNotifications();
       await client.invalidateQueries({ queryKey: ["wallet"] });
       await client.invalidateQueries({ queryKey: ["tryon-history"] });
       router.push({
@@ -93,6 +97,7 @@ export default function Stylist() {
         params: { id: result.job.id, t: String(startedAt.current) },
       });
     } catch (e) {
+      trackPhotoProblem(e);
       if (e instanceof Error && e.message === "NO_CREDITS") outOfCredits();
       else setError(friendlyError(e));
     } finally {

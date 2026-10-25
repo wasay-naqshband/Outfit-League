@@ -54,7 +54,11 @@ export default function Privacy() {
           attaching your private photos or account identity. Purchases are
           handled by Apple; RevenueCat receives your purchase record and an
           anonymous account ID so your plan and credits stay in sync. We never
-          see your card details. No external analytics service is connected.
+          see your card details. The iPhone app sends PostHog anonymous usage
+          events (which screens and features are used, crashes) tied to a
+          random account ID, never your photos, text or email. If you allow
+          notifications, your phone’s push token is stored so we can tell you
+          when a look is ready or your battle gets votes.
         </Body>
         <Heading size={25}>Removing images.</Heading>
         <Body>

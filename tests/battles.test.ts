@@ -41,6 +41,9 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile("supabase/migrations/202610260026_push.sql", "utf8"),
+  );
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
   await db.query("insert into public.profiles values($1,null),($2,null)", [
     owner,
@@ -418,4 +421,37 @@ test("two reports hide a comment; blocking records the author for that viewer on
   await assert.rejects(
     service("select public.report_battle_comment(999999,'r3')"),
   );
+});
+
+test("vote milestones notify once each; comment pushes wait 3 hours", async () => {
+  const [j1, j2] = await jobs(owner, 2);
+  const id = await createN("choose", [j1!, j2!]);
+  await service(
+    "update public.battles set ready=true,a_path=id||'/a.jpg',b_path=id||'/b.jpg' where id=$1",
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [owner, id]);
+  const milestone = async () =>
+    (await service("select public.battle_vote_milestone($1) m", [id])).rows[0]!
+      .m;
+  const vote = (k: string) =>
+    service("select public.cast_battle_vote($1,$2,'A',null,false)", [id, k]);
+  assert.equal(await milestone(), null);
+  await vote("p1");
+  assert.equal(await milestone(), 1);
+  assert.equal(await milestone(), null); // already announced
+  for (const k of ["p2", "p3", "p4"]) await vote(k);
+  assert.equal(await milestone(), null);
+  await vote("p5");
+  assert.equal(await milestone(), 5);
+  const comment = async () =>
+    (await service("select public.battle_comment_push($1) ok", [id])).rows[0]!
+      .ok;
+  assert.equal(await comment(), true);
+  assert.equal(await comment(), false);
+  await service(
+    "update public.battles set comment_pushed_at=now()-interval '4 hours' where id=$1",
+    [id],
+  );
+  assert.equal(await comment(), true);
 });

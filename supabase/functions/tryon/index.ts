@@ -9,6 +9,7 @@ import {
   validateJpeg,
   readRequestJson,
 } from "../_shared/domain.ts";
+import { notify } from "../_shared/push.ts";
 import {
   FashnProvider,
   geminiTryOn,
@@ -192,6 +193,14 @@ async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
     );
     validateJpeg(bytes);
     await storeResult(job, bytes);
+    await notify(db, job.owner_id, {
+      title: "Your look is ready ✨",
+      body: job.outfit
+        ? "Your stylist’s outfit is on you. Tap to see it and shop the look."
+        : "Tap to see it on you.",
+      url: "/generation/" + job.id,
+      kind: "look_ready",
+    });
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error(name, "try-on failed", job.id, reason);
@@ -405,6 +414,12 @@ async function makeSpin(job: Job, spin: Spin) {
       }),
     );
     await rpc("finish_spin", { p_spin: spin.id, p_sheet: id });
+    await notify(db, job.owner_id, {
+      title: "Your 360° view is ready 🔄",
+      body: "Spin your look all the way round.",
+      url: "/generation/" + job.id,
+      kind: "look_ready",
+    });
   } catch (error) {
     const code =
       error instanceof Error &&

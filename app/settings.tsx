@@ -1,5 +1,5 @@
 import React from "react";
-import { Linking, Pressable, View } from "react-native";
+import { Linking, Platform, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +15,11 @@ import { accountAction } from "../src/lib/account";
 import { useApp } from "../src/lib/state";
 import { supabase } from "../src/lib/supabase";
 import { useProfile, useWallet } from "../src/lib/queries";
+import {
+  askForNotifications,
+  forgetPush,
+  notificationsAllowed,
+} from "../src/lib/notifications";
 import { colors } from "../src/theme";
 import { Avatar } from "../src/components/Avatar";
 
@@ -99,6 +104,11 @@ export default function Settings() {
     enabled: !!session,
     retry: false,
   }).isSuccess;
+  const notifications = useQuery({
+    queryKey: ["notifications-allowed"],
+    queryFn: notificationsAllowed,
+    enabled: Platform.OS === "ios",
+  });
   const name = profile.data?.name;
   return (
     <Page>
@@ -174,6 +184,26 @@ export default function Settings() {
           </Group>
         )}
 
+        {session && Platform.OS === "ios" && (
+          <Group title="NOTIFICATIONS">
+            <Row
+              icon="send"
+              label="Notifications"
+              value={notifications.data ? "On" : "Off"}
+              onPress={() => {
+                // First time: Apple's prompt. After that, iPhone Settings
+                // is the on/off switch.
+                void (async () => {
+                  const before = notifications.data;
+                  if (!before) await askForNotifications();
+                  const { data: now } = await notifications.refetch();
+                  if (before || !now) void Linking.openSettings();
+                })();
+              }}
+            />
+          </Group>
+        )}
+
         <Group title="PRIVACY & HELP">
           <Row
             icon="shield"
@@ -208,8 +238,8 @@ export default function Settings() {
               icon="log-out"
               label="Sign out"
               onPress={() => {
-                void supabase?.auth
-                  .signOut()
+                void forgetPush()
+                  .then(() => supabase?.auth.signOut())
                   .then(() => router.replace("/welcome"));
               }}
             />

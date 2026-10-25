@@ -11,6 +11,7 @@ import {
   type Lookalike,
 } from "../lib/tryon-api";
 import { friendlyError } from "../types/tryon";
+import { analytics } from "../lib/analytics";
 import { colors, fonts, shadow } from "../theme";
 
 export const money = (price: number | null) =>
@@ -44,6 +45,15 @@ export function Lookalikes({ id }: { id: string }) {
         : null;
   async function buy(index: number) {
     if (opening >= 0) return;
+    const b = badge(index);
+    analytics.track("lookalike_clicked", {
+      badge:
+        b === "Closest match"
+          ? "closest"
+          : b === "Cheapest"
+            ? "cheapest"
+            : "other",
+    });
     setOpening(index);
     setError("");
     try {
@@ -67,7 +77,10 @@ export function Lookalikes({ id }: { id: string }) {
           secondary
           icon="search"
           title="Find similar lookalikes"
-          onPress={() => setAsked(true)}
+          onPress={() => {
+            setAsked(true);
+            analytics.track("lookalikes_requested", { from: "result" });
+          }}
         />
       ) : query.isError ? (
         <Button

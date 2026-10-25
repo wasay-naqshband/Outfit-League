@@ -10,6 +10,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Body, Button, Heading } from "./ui";
 import { ProductCard } from "./Lookalikes";
+import { analytics } from "../lib/analytics";
 import { pieceLink, shopPiece, type OutfitPiece } from "../lib/tryon-api";
 import { friendlyError, type TryOnJob } from "../types/tryon";
 import { colors, fonts, shadow } from "../theme";
@@ -39,6 +40,7 @@ function PieceOptions({ piece }: { piece: OutfitPiece }) {
   async function open(index: number) {
     const item = items[index];
     if (opening >= 0 || !item) return;
+    analytics.track("shop_look_clicked", { part: piece.part });
     setOpening(index);
     setError("");
     try {

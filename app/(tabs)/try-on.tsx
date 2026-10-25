@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { analytics } from "../../src/lib/analytics";
+import { analytics, trackPhotoProblem } from "../../src/lib/analytics";
+import { askForNotifications } from "../../src/lib/notifications";
 import { Alert, Modal, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { clearSharedPayloads, getSharedPayloads } from "expo-sharing";
@@ -267,6 +268,8 @@ export default function TryOn() {
         { mode: "live" },
         `start:${result.job.id}`,
       );
+      // The natural moment to offer a "your look is ready" ping.
+      void askForNotifications();
       await queryClient.invalidateQueries({ queryKey: ["wallet"] });
       await queryClient.invalidateQueries({ queryKey: ["tryon-history"] });
       attempt.current = null;
@@ -276,6 +279,7 @@ export default function TryOn() {
         params: { id: result.job.id, t: String(startedAt.current) },
       });
     } catch (e) {
+      trackPhotoProblem(e);
       if (e instanceof Error && e.message === "NO_CREDITS") creditsAlert();
       else setError(friendlyError(e));
       void history.refetch();

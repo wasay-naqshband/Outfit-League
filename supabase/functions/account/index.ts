@@ -87,6 +87,23 @@ Deno.serve(async (req) => {
       await db.auth.admin.updateUserById(user.id, { ban_duration: "876000h" });
       return reply({ accepted: true });
     }
+    // This iPhone's push token (or forget it on sign-out). A token moves to
+    // whoever signed in on that phone last.
+    if (body.action === "push-token") {
+      const push = String(body.token ?? "");
+      if (!/^ExponentPushToken\[[A-Za-z0-9_-]+\]$/.test(push))
+        throw new Error("INVALID_REQUEST");
+      checked(
+        body.remove === true
+          ? await db.from("push_tokens").delete().eq("token", push)
+          : await db.from("push_tokens").upsert({
+              token: push,
+              owner_id: user.id,
+              updated_at: new Date().toISOString(),
+            }),
+      );
+      return reply({ saved: true });
+    }
     const moderator = checked(
       await db
         .from("moderators")

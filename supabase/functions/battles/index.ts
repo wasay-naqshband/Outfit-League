@@ -6,6 +6,28 @@ import {
   MAX_IMAGE_BYTES,
 } from "../_shared/domain.ts";
 import { objectionable } from "../_shared/profanity.ts";
+import { notify, type Push } from "../_shared/push.ts";
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
+// Tells the battle's owner about activity after replying (never the actor).
+function tellOwner(
+  id: string,
+  actor: string | null,
+  push: (title: string) => Omit<Push, "url" | "kind">,
+) {
+  EdgeRuntime.waitUntil(
+    (async () => {
+      const row = checked(
+        await db.from("battles").select("owner_id,title").eq("id", id).single(),
+      );
+      if (row && row.owner_id !== actor)
+        await notify(db, row.owner_id, {
+          ...push(row.title),
+          url: "/battle/" + id,
+          kind: "battle",
+        });
+    })().catch(() => {}),
+  );
+}
 const env = (key: string) => Deno.env.get(key) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -386,6 +408,10 @@ Deno.serve(async (req) => {
           .eq("status", "waiting")
           .eq("b_owner_id", owner),
       );
+      tellOwner(id, owner, (title) => ({
+        title: "Your friend joined the battle ⚡",
+        body: `“${title}” is live. Share it and get the votes in.`,
+      }));
       return reply(await view(id, owner, key, 0));
     }
     if (body.action === "vote") {
@@ -401,6 +427,15 @@ Deno.serve(async (req) => {
             : null,
         p_authenticated: !!owner && body.publicConsent === true,
       });
+      const milestone = await rpc("battle_vote_milestone", { p_id: id });
+      if (milestone)
+        tellOwner(id, owner, (title) => ({
+          title:
+            milestone === 1
+              ? "Your first vote is in 🗳️"
+              : `${milestone} votes on your battle 🔥`,
+          body: `“${title}”: see who’s winning.`,
+        }));
       return reply(await view(id, owner, key, 0));
     }
     if (body.action === "comment") {
@@ -421,6 +456,11 @@ Deno.serve(async (req) => {
         p_name: body.name,
         p_body: body.body,
       });
+      if (await rpc("battle_comment_push", { p_id: id }))
+        tellOwner(id, owner, (title) => ({
+          title: "New comment on your battle 💬",
+          body: `${String(body.name).trim()} commented on “${title}”.`,
+        }));
       return reply(await view(id, owner, key, 0));
     }
     if (body.action === "uncomment") {

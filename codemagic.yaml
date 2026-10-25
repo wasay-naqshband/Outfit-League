@@ -26,6 +26,8 @@ workflows:
         EXPO_PUBLIC_SUPABASE_URL: https://xxrylsmiaehgnljyzguh.supabase.co
         EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_HecThul_Ql3yp1tmG3_fVA_JYq94elU
         EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: $REVENUECAT_IOS_SDK_KEY
+        # PostHog project token: write-only, safe to ship in the app.
+        EXPO_PUBLIC_POSTHOG_KEY: phc_p7a7jjnL3h9ng7Tjnudn6rtx6SxTgHu2Sdh8GNkr6JJf
     scripts:
       - name: Install locked dependencies
         script: |

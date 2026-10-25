@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { analytics } from "../lib/analytics";
 import {
   AccessibilityInfo,
   Alert,
@@ -288,6 +289,14 @@ export default function Onboarding() {
   const [showPhotoGuide, setShowPhotoGuide] = useState(false);
   const [chosenPhoto, setChosenPhoto] = useState<LocalPhoto | null>(null);
   const go = (next: number) => update({ step: next });
+  // Funnel: which onboarding screen people reach (once each per session).
+  useEffect(() => {
+    analytics.track(
+      "onboarding_step",
+      { step: String(step + 1) as "1" },
+      "onboarding:" + step,
+    );
+  }, [step]);
   const back = () => {
     if (showPhotoGuide) {
       setShowPhotoGuide(false);
