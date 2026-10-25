@@ -8,10 +8,18 @@ import {
   Button,
   Heading,
   Icon,
+  CreditPill,
   Page,
   SettingsButton,
+  StickerBadge,
 } from "../../src/components/ui";
 import { CookingLoader } from "../../src/components/CookingLoader";
+import {
+  HowScanWorks,
+  ScanViewfinderHero,
+  TactileButton,
+} from "../../src/components/ScanHero";
+import { LinearGradient } from "expo-linear-gradient";
 import { PieceOptions } from "../../src/components/ShopTheLook";
 import { useApp } from "../../src/lib/state";
 import { useTryOnDraft } from "../../src/lib/tryon-draft";
@@ -21,7 +29,7 @@ import { disposePhoto, pickPhoto } from "../../src/lib/photos";
 import { saveLibraryItem } from "../../src/lib/library";
 import { scanPhoto, type Lookalike, type Scan } from "../../src/lib/tryon-api";
 import { friendlyError, type LocalPhoto } from "../../src/types/tryon";
-import { colors, fonts, shadow } from "../../src/theme";
+import { colors, fonts, gradients, shadow } from "../../src/theme";
 
 const MESSAGES = [
   "Zooming in on the details…",
@@ -65,6 +73,10 @@ export default function ScanTab() {
 
   async function snap(camera: boolean) {
     if (busy) return;
+    if (!session) {
+      router.push("/auth");
+      return;
+    }
     setError("");
     setLimited(false);
     try {
@@ -135,20 +147,42 @@ export default function ScanTab() {
   const scan = result?.scan;
   return (
     <Page>
-      <View
+      <LinearGradient
+        colors={gradients.yellow}
         style={{
+          borderBottomLeftRadius: 32,
+          borderBottomRightRadius: 32,
+          paddingTop: 28,
           paddingHorizontal: 20,
-          paddingTop: 16,
-          flexDirection: "row",
-          alignItems: "center",
+          paddingBottom: 22,
+          gap: 14,
+          ...shadow(0.1),
         }}
       >
-        <Heading size={30} style={{ flex: 1 }}>
-          Scan
-        </Heading>
-        <SettingsButton />
-      </View>
-      <View style={{ padding: 20, gap: 16 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Heading size={32} style={{ flex: 1, letterSpacing: -1 }}>
+            Scan
+          </Heading>
+          <CreditPill compact />
+          <SettingsButton />
+        </View>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
+          <Heading size={30} style={{ letterSpacing: -1 }}>
+            Spot it. Snap it.
+          </Heading>
+          <StickerBadge size={24} rotate="-5deg">
+            Get it.
+          </StickerBadge>
+        </View>
+      </LinearGradient>
+      <View style={{ paddingHorizontal: 20, paddingTop: 16, gap: 18 }}>
         {busy && (
           <CookingLoader
             messages={MESSAGES}
@@ -156,34 +190,26 @@ export default function ScanTab() {
             startedAt={startedAt.current}
           />
         )}
-        {!session ? (
+        {!busy && !scan && (
           <>
-            <Heading size={24}>Spot it. Snap it. Get it.</Heading>
-            <Body>
-              Sign in to scan any piece you see and find out what it is, how it
-              suits you and where to buy it.
-            </Body>
-            <Button title="Sign in" onPress={() => router.push("/auth")} />
+            <ScanViewfinderHero />
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 2 }}>
+              <TactileButton
+                icon="camera"
+                title="Snap a piece"
+                style={{ flex: 1 }}
+                onPress={() => void snap(Platform.OS !== "web")}
+              />
+              <TactileButton
+                icon="image"
+                label="Choose from gallery"
+                fill={colors.white}
+                style={{ width: 60 }}
+                onPress={() => void snap(false)}
+              />
+            </View>
+            <HowScanWorks />
           </>
-        ) : (
-          !busy &&
-          !scan && (
-            <>
-              <Heading size={24}>Spot it. Snap it. Get it.</Heading>
-              <Body>
-                See a piece you love, on someone, in a shop, anywhere? Snap it.
-                We’ll tell you what it is, how it’ll look on you, and where to
-                buy it.
-              </Body>
-              {photo && (
-                <Image
-                  source={{ uri: photo.uri }}
-                  contentFit="cover"
-                  style={{ height: 260, borderRadius: 28 }}
-                />
-              )}
-            </>
-          )
         )}
         {!!error && (
           <Body
@@ -366,14 +392,14 @@ export default function ScanTab() {
             />
           </>
         )}
-        {session && !busy && (
+        {!busy && !!scan && (
           <View style={{ flexDirection: "row", gap: 10 }}>
             {Platform.OS !== "web" && (
               <View style={{ flex: 1 }}>
                 <Button
-                  secondary={!!scan}
+                  secondary
                   icon="camera"
-                  title={scan ? "Scan another" : "Snap a piece"}
+                  title="Scan another"
                   onPress={() => void snap(true)}
                 />
               </View>
