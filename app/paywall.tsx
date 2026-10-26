@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -355,6 +362,12 @@ export default function Paywall() {
             style={{ minHeight: 60, borderRadius: 22, marginTop: 4 }}
             onPress={() => void purchase()}
           />
+          {Platform.OS === "ios" &&
+            process.env.EXPO_PUBLIC_APPLE_SANDBOX_TESTING === "true" && (
+              <Body style={{ textAlign: "center", fontSize: 13 }}>
+                TestFlight sandbox purchase · Apple won’t charge you.
+              </Body>
+            )}
           <Body style={{ textAlign: "center", fontSize: 13 }}>
             {purchaseMessage ||
               (selected === "monthly"

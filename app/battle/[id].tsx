@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -181,8 +188,8 @@ export default function BattleDetail() {
     if (!battle) return;
     const text =
       battle.status === "waiting"
-        ? "I challenge you to a fit battle on Outfit League 👀 Join with your look:"
-        : `${battle.title} Vote for your pick 👇`;
+        ? "⚡ Fit battle! Join me with your look and let the squad decide 👀"
+        : `⚡ FIT CHECK: ${battle.title}\nTwo looks. One winner. Pick your side and tell me why 👇`;
     try {
       if (how === "copy") await copyBattleLink(id);
       else if (how === "whatsapp") await whatsappBattleLink(id, text);
@@ -197,6 +204,42 @@ export default function BattleDetail() {
   }
   function signIn() {
     void rememberBattleReturn(id).then(() => router.push("/auth"));
+  }
+
+  function confirmDelete() {
+    const remove = async () => {
+      if (lock.current) return;
+      lock.current = true;
+      setBusy(true);
+      setMessage("");
+      try {
+        await battleCall({ action: "delete", id });
+        client.removeQueries({ queryKey: ["battle", session?.user.id, id] });
+        await client.invalidateQueries({
+          queryKey: ["battles", session?.user.id],
+        });
+        router.replace("/(tabs)/battles");
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Couldn’t delete this battle.",
+        );
+      } finally {
+        lock.current = false;
+        setBusy(false);
+      }
+    };
+    const message =
+      "This permanently deletes the battle, its votes and comments, and its shared photos.";
+    if (Platform.OS === "web") {
+      if (window.confirm(`Delete this battle?\n\n${message}`)) void remove();
+    } else {
+      Alert.alert("Delete this battle?", message, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => void remove() },
+      ]);
+    }
   }
 
   const total = battle
@@ -678,6 +721,16 @@ export default function BattleDetail() {
                     title="Close voting"
                     disabled={busy}
                     onPress={() => void action("close")}
+                  />
+                )}
+                {battle.isOwner && (
+                  <Button
+                    secondary
+                    icon="trash-2"
+                    title="Delete battle"
+                    disabled={busy}
+                    style={{ borderColor: "#D86A63" }}
+                    onPress={confirmDelete}
                   />
                 )}
                 {battle.isOwner &&

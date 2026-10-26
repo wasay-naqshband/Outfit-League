@@ -25,7 +25,9 @@ workflows:
         EXPO_PUBLIC_APP_URL: https://chutni.store
         EXPO_PUBLIC_SUPABASE_URL: https://xxrylsmiaehgnljyzguh.supabase.co
         EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_HecThul_Ql3yp1tmG3_fVA_JYq94elU
-        EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: $REVENUECAT_IOS_SDK_KEY
+        # RevenueCat public iOS SDK key; public by design and must match the app configuration.
+        EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: appl_bCXFpGysWSsDnCwlqxbYfEuwAHo
+        EXPO_PUBLIC_APPLE_SANDBOX_TESTING: "true"
         # PostHog project token: write-only, safe to ship in the app.
         EXPO_PUBLIC_POSTHOG_KEY: phc_p7a7jjnL3h9ng7Tjnudn6rtx6SxTgHu2Sdh8GNkr6JJf
     scripts:
@@ -69,5 +71,7 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: false
+        submit_to_testflight: true
+        beta_groups:
+          - Owner beta
         submit_to_app_store: false

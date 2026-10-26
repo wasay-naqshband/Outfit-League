@@ -13,6 +13,30 @@ export async function cleanupAccounts(db: SupabaseClient) {
       .order("requested_at")
       .limit(5),
   );
+  const deletionOwners = checked(
+    await db.from("account_deletions").select("owner_id"),
+  );
+  const deleting = new Set(
+    (deletionOwners ?? []).map((request) => request.owner_id),
+  );
+  const queued = checked(
+    await db.from("account_cleanup").select("owner_id,bucket,path").limit(100),
+  );
+  for (const item of queued ?? []) {
+    if (deleting.has(item.owner_id)) continue;
+    try {
+      checked(await db.storage.from(item.bucket).remove([item.path]));
+      checked(
+        await db
+          .from("account_cleanup")
+          .delete()
+          .eq("bucket", item.bucket)
+          .eq("path", item.path),
+      );
+    } catch {
+      // Retry this queued object on the next reconciliation tick.
+    }
+  }
   for (const request of requests ?? []) {
     try {
       const ban = await db.auth.admin.updateUserById(request.owner_id, {

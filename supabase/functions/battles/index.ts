@@ -304,6 +304,57 @@ Deno.serve(async (req) => {
           "unknown"),
     );
     await rpc("battle_rate", { p_key: "network:" + network, p_max: 120 });
+    if (body.action === "share-preview") {
+      const row = checked(
+        await db
+          .from("battles")
+          .select("title,status,kind,voting_mode,a_path,b_path,c_path,d_path")
+          .eq("id", id)
+          .single(),
+      );
+      if (!row || row.status !== "published") throw new Error("NOT_FOUND");
+      const paths = [row.a_path, row.b_path, row.c_path, row.d_path].filter(
+        (path): path is string => typeof path === "string",
+      );
+      const images = await Promise.all(
+        paths.map(async (path) => {
+          const signed = checked(
+            await db.storage
+              .from("battle-images")
+              .createSignedUrl(path, 60 * 60 * 24 * 30),
+          );
+          if (!signed) throw new Error("NOT_FOUND");
+          return signed.signedUrl;
+        }),
+      );
+      return reply({
+        title: row.title,
+        kind: row.kind,
+        mode: row.voting_mode,
+        images,
+      });
+    }
+    if (body.action === "delete") {
+      if (!owner) throw new Error("UNAUTHORIZED");
+      const assets = (await rpc("delete_owned_battle", {
+        p_owner: owner,
+        p_id: id,
+      })) as { bucket: string; path: string }[];
+      if (assets?.length) {
+        const paths = assets.map((asset) => asset.path);
+        const removed = await db.storage.from("battle-images").remove(paths);
+        if (!removed.error)
+          checked(
+            await db
+              .from("account_cleanup")
+              .delete()
+              .eq("owner_id", owner)
+              .eq("bucket", "battle-images")
+              .in("path", paths),
+          );
+      }
+      return reply({ deleted: true });
+    }
     if (body.action === "create") {
       if (!owner) throw new Error("UNAUTHORIZED");
       const sources = Array.isArray(body.sources) ? body.sources : [];

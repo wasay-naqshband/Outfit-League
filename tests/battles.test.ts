@@ -15,6 +15,8 @@ before(async () => {
  grant usage on schema auth to public;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
  create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,created_at timestamptz default now());
+ create table public.account_cleanup(owner_id uuid,bucket text,path text,primary key(bucket,path));
+ grant all on public.account_cleanup to service_role;
  create table public.try_on_jobs(id uuid primary key,owner_id uuid,status text);
  create table public.profiles(id uuid primary key,deleting_at timestamptz);`);
   await db.exec(
@@ -43,6 +45,12 @@ before(async () => {
   );
   await db.exec(
     await readFile("supabase/migrations/202610260026_push.sql", "utf8"),
+  );
+  await db.exec(
+    await readFile(
+      "supabase/migrations/202610260029_delete_battle.sql",
+      "utf8",
+    ),
   );
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
   await db.query("insert into public.profiles values($1,null),($2,null)", [
@@ -126,6 +134,56 @@ test("private drafts require owned distinct sources and an image-ready publish t
   await assert.rejects(
     service("select public.manage_battle($1,$2,'unpublish')", [other, id]),
     /NOT_FOUND/,
+  );
+});
+test("battle deletion is owner-only, cascades results, and queues its photos", async () => {
+  const id = await create();
+  const imageA = `${id}/a.jpg`;
+  const imageB = `${id}/b.jpg`;
+  await service(
+    "update public.battles set ready=true,a_path=$2,b_path=$3 where id=$1",
+    [id, imageA, imageB],
+  );
+  await publish(id);
+  await service("select public.cast_battle_vote($1,'voter','A',null,false)", [
+    id,
+  ]);
+
+  await assert.rejects(
+    user("select * from public.delete_owned_battle($1,$2)", [owner, id]),
+    /permission denied/,
+  );
+  const assets = await service(
+    "select * from public.delete_owned_battle($1,$2)",
+    [owner, id],
+  );
+  assert.deepEqual(
+    assets.rows.map(({ bucket, path }) => [bucket, path]),
+    [
+      ["battle-images", imageA],
+      ["battle-images", imageB],
+    ],
+  );
+  assert.equal(
+    (await service("select * from public.battles where id=$1", [id])).rows
+      .length,
+    0,
+  );
+  assert.equal(
+    (
+      await service("select * from public.battle_votes where battle_id=$1", [
+        id,
+      ])
+    ).rows.length,
+    0,
+  );
+  assert.equal(
+    (
+      await service("select * from public.account_cleanup where owner_id=$1", [
+        owner,
+      ])
+    ).rows.length,
+    2,
   );
 });
 test("anonymous votes discard names, persist once and cannot change with repeated calls", async () => {

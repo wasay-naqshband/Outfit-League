@@ -1,7 +1,7 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { router, useFocusEffect } from "expo-router";
+import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Body,
@@ -69,7 +69,6 @@ export default function ScanTab() {
   const [error, setError] = useState("");
   const [limited, setLimited] = useState(false);
   const startedAt = useRef(0);
-  const opened = useRef(false);
 
   async function snap(camera: boolean) {
     if (busy) return;
@@ -105,20 +104,6 @@ export default function ScanTab() {
       setBusy(false);
     }
   }
-  // Tapping the tab goes straight to the camera (once per visit).
-  useFocusEffect(
-    useCallback(() => {
-      if (session && Platform.OS !== "web" && !photo && !opened.current) {
-        opened.current = true;
-        void snap(true);
-      }
-      return () => {
-        opened.current = false;
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [session, photo]),
-  );
-
   async function save() {
     if (!photo || !result || saved) return;
     setError("");
@@ -226,7 +211,10 @@ export default function ScanTab() {
           <Button
             title="Get Pro"
             onPress={() =>
-              router.push({ pathname: "/paywall", params: { source: "feature" } })
+              router.push({
+                pathname: "/paywall",
+                params: { source: "feature" },
+              })
             }
           />
         )}

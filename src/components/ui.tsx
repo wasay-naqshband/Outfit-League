@@ -61,7 +61,8 @@ export type IconName =
   | "link"
   | "arrow-right"
   | "home"
-  | "gift";
+  | "gift"
+  | "trash-2";
 export function Icon({
   name,
   color = c.ink,
