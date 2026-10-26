@@ -150,8 +150,8 @@ export default function Paywall() {
       id: "yearly",
       title: "Pro yearly",
       description:
-        "40 try-ons + 5 360° views each month · $4.17/month · save 58%",
-      fallback: "$49.99",
+        "40 try-ons + 5 360° views each month · $6.67/month · save 33%",
+      fallback: "$79.99",
       featured: true,
     },
     {
@@ -353,7 +353,7 @@ export default function Paywall() {
                 : ownedPlan
                   ? "You’re on Pro ✓"
                   : selectedPackage
-                    ? `Continue · ${price(selected, selected === "yearly" ? "$49.99/year" : selected === "monthly" ? "$9.99/month" : "$4.99")}`
+                    ? `Continue · ${price(selected, selected === "yearly" ? "$79.99/year" : selected === "monthly" ? "$9.99/month" : "$4.99")}`
                     : purchasesAvailable()
                       ? "This offer is being set up"
                       : "Purchases aren’t configured yet"
