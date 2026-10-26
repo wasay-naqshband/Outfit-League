@@ -71,7 +71,7 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        beta_groups:
-          - Owner beta
+        # Apple distributes processed uploads through the existing internal
+        # "Owner auto" group. Beta review is only needed for external testers.
+        submit_to_testflight: false
         submit_to_app_store: false

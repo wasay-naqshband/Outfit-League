@@ -156,48 +156,40 @@ export default function Closet() {
           </>
         ) : (
           <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                kind === "wardrobe" ? "Add clothing item" : "Save inspiration"
-              }
-              onPress={() =>
-                router.push({ pathname: "/library-edit", params: { kind } })
-              }
-            >
-              <LinearGradient
-                colors={kind === "wardrobe" ? gradients.mint : gradients.pink}
-                style={{
-                  borderRadius: 28,
-                  borderWidth: 4,
-                  borderColor: colors.white,
-                  padding: 20,
-                  gap: 10,
-                  ...shadow(0.08),
-                }}
+            {kind === "wardrobe" && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add clothing item"
+                onPress={() =>
+                  router.push({ pathname: "/library-edit", params: { kind } })
+                }
               >
-                <View
+                <LinearGradient
+                  colors={gradients.mint}
                   style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
+                    borderRadius: 28,
+                    borderWidth: 4,
+                    borderColor: colors.white,
+                    padding: 20,
+                    gap: 10,
+                    ...shadow(0.08),
                   }}
                 >
-                  <Icon name="plus" size={30} />
-                  <StickerBadge>Just for you</StickerBadge>
-                </View>
-                <Heading size={28}>
-                  {kind === "wardrobe"
-                    ? "Build your real-life closet."
-                    : "Found a fit you love?"}
-                </Heading>
-                <Body>
-                  {kind === "wardrobe"
-                    ? "Add a photo, name it, and try it on anytime."
-                    : "Save a link, screenshot or photo. Keep the inspiration."}
-                </Body>
-              </LinearGradient>
-            </Pressable>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Icon name="plus" size={30} />
+                    <StickerBadge>Just for you</StickerBadge>
+                  </View>
+                  <Heading size={28}>Build your real-life closet.</Heading>
+                  <Body>Add a photo, name it, and try it on anytime.</Body>
+                </LinearGradient>
+              </Pressable>
+            )}
             <View
               style={{
                 flexDirection: "row",
