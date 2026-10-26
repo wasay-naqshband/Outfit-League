@@ -17,16 +17,16 @@ const escapeHtml = (value: string) =>
       })[character]!,
   );
 
-export default async function (
+export async function battlePreview(
   request: Request,
-  context: { next: () => Promise<Response> },
+  next: () => Promise<Response>,
 ) {
   const id = new URL(request.url).pathname.split("/").pop() ?? "";
   if (
     !SOCIAL_CRAWLER.test(request.headers.get("user-agent") ?? "") ||
     !/^[0-9a-f-]{36}$/i.test(id)
   )
-    return context.next();
+    return next();
 
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/battles`, {
@@ -42,10 +42,10 @@ export default async function (
         token: crypto.randomUUID(),
       }),
     });
-    if (!response.ok) return context.next();
+    if (!response.ok) return next();
     const battle = await response.json();
     if (!battle.title || !Array.isArray(battle.images) || !battle.images.length)
-      return context.next();
+      return next();
 
     const title = escapeHtml(String(battle.title));
     const description = escapeHtml(
@@ -70,6 +70,6 @@ export default async function (
       },
     });
   } catch {
-    return context.next();
+    return next();
   }
 }
