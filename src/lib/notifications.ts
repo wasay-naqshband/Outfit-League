@@ -87,10 +87,9 @@ export async function forgetPush() {
   pushToken = null;
 }
 
-const COMEBACK: [string, string][] = [
-  ["Not sure what to wear? 👀", "Tell your AI stylist where you’re going."],
-  ["Your closet misses you 🧥", "Try something new on yourself in seconds."],
-  ["Weekend plans? ✨", "Get a full outfit styled on you."],
+const COMEBACK = [
+  "Your mirror says yes to everything 🪞",
+  "Get a second opinion from Outfit League.",
 ];
 const at = (date: Date, kind: Kind, title: string, body: string) =>
   Notifications.scheduleNotificationAsync({
@@ -111,8 +110,7 @@ export async function scheduleReminders(trialEndsAt: string | null) {
     const later = new Date();
     later.setDate(later.getDate() + 3);
     later.setHours(18, 0, 0, 0);
-    const [title, body] = COMEBACK[later.getDay() % COMEBACK.length]!;
-    await at(later, "comeback", title, body);
+    await at(later, "comeback", COMEBACK[0], COMEBACK[1]);
     const remind = trialEndsAt
       ? new Date(new Date(trialEndsAt).getTime() - 24 * 3600 * 1000)
       : null;
