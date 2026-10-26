@@ -194,13 +194,25 @@ async function view(
         checked(
           await db
             .from("battle_comments")
-            .select("id,author_key,display_name,body,created_at")
+            .select("id,parent_id,author_key,display_name,body,created_at")
             .eq("battle_id", id)
             .eq("hidden", false)
             .order("id", { ascending: false })
             .limit(50),
         ) ?? []
       ).filter((c) => !blocked.has(c.author_key))
+    : [];
+  const visibleCommentIds = new Set(comments.map((c) => c.id));
+  const visibleComments = comments.filter(
+    (c) => c.parent_id == null || visibleCommentIds.has(c.parent_id),
+  );
+  const commentLikes = visibleComments.length
+    ? checked(
+        await db
+          .from("battle_comment_likes")
+          .select("comment_id,voter_key")
+          .in("comment_id", visibleComments.map((c) => c.id)),
+      ) ?? []
     : [];
   let voters: unknown[] = [];
   if (
@@ -235,12 +247,17 @@ async function view(
     players: players && { a: players[0], b: players[1] },
     counts,
     mine: checked(mine)?.choice ?? null,
-    comments: comments.reverse().map((c) => ({
+    comments: visibleComments.reverse().map((c) => ({
       id: c.id,
+      parentId: c.parent_id,
       name: c.display_name,
       body: c.body,
       at: c.created_at,
       mine: c.author_key === key,
+      likes: commentLikes.filter((like) => like.comment_id === c.id).length,
+      liked: commentLikes.some(
+        (like) => like.comment_id === c.id && like.voter_key === key,
+      ),
     })),
     voters,
   };
@@ -476,7 +493,7 @@ Deno.serve(async (req) => {
           typeof body.name === "string" && !objectionable(body.name)
             ? body.name.slice(0, 40)
             : null,
-        p_authenticated: !!owner && body.publicConsent === true,
+        p_public_consent: body.publicConsent === true,
       });
       const milestone = await rpc("battle_vote_milestone", { p_id: id });
       if (milestone)
@@ -496,7 +513,8 @@ Deno.serve(async (req) => {
         body.name.trim().length < 2 ||
         body.name.length > 40 ||
         !body.body.trim() ||
-        body.body.length > 280
+        body.body.length > 280 ||
+        (body.parentId != null && !Number.isSafeInteger(body.parentId))
       )
         throw new Error("INVALID_REQUEST");
       if (objectionable(body.name + " " + body.body))
@@ -506,12 +524,23 @@ Deno.serve(async (req) => {
         p_key: key,
         p_name: body.name,
         p_body: body.body,
+        p_parent: body.parentId ?? null,
       });
       if (await rpc("battle_comment_push", { p_id: id }))
         tellOwner(id, owner, (title) => ({
           title: "New comment on your battle 💬",
           body: `${String(body.name).trim()} commented on “${title}”.`,
         }));
+      return reply(await view(id, owner, key, 0));
+    }
+    if (body.action === "like-comment") {
+      if (!Number.isSafeInteger(body.commentId))
+        throw new Error("INVALID_REQUEST");
+      await rpc("toggle_battle_comment_like", {
+        p_id: id,
+        p_comment: body.commentId,
+        p_key: key,
+      });
       return reply(await view(id, owner, key, 0));
     }
     if (body.action === "uncomment") {

@@ -20,6 +20,7 @@ export const gradients = {
   mint: ["#CFF5E4", "#8EDDBC"],
   sun: ["#FFF1A8", "#FFD43B"],
   pink: ["#FFE0F0", "#FF9BD2"],
+  butter: ["#FFF1B8", "#FFD45E"],
 } as const;
 export type Palette = Exclude<keyof typeof gradients, "yellow">;
 export const fonts = {

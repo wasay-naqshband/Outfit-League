@@ -460,7 +460,7 @@ export async function scanItem(
       {
         text:
           "Someone spotted this and snapped it. Identify the single most noticeable clothing item or accessory: a concrete name (colour + fabric/finish + item, e.g. 'light-wash straight-leg jeans'), " +
-          "its category, its 1 to 3 main colours with hex codes, and up to 4 short details (fabric, fit, cut, standout detail). " +
+          "its category, its 1 to 3 main colours with hex codes, and up to 4 short typed details (fabric, fit, collar, graphic, or other), each with a concise label and value. " +
           "Name the aesthetic it gives off in 1 to 3 words (e.g. Old money, Streetwear, Quiet luxury, Y2K, Gorpcore, Minimal) and one punchy line on what it does for a look. " +
           "Give a typical US price range like '$40–80'. Give a US shopping query (4 to 8 words, no brand unless the logo is clearly readable). " +
           (me.season
@@ -468,6 +468,8 @@ export async function scanItem(
             : "Their colour season is unknown. ") +
           (me.styles.length ? `Their style: ${me.styles.join(", ")}. ` : "") +
           "Score 1 to 10 how well this piece suits them on colour and style only (never body or looks), with a one-line reason that mentions their colours or style. " +
+          "Also return separate style and colour verdicts with a short value and status good, mixed, or poor. Add up to 3 short visible-item annotations with accurate normalized image coordinates from 0 to 1 when you can locate them; omit coordinates when uncertain. Use no emojis. " +
+          "Suggest one pairing colour with a valid hex code and give numeric low/high values for the typical price range. " +
           (listing
             ? `Their closet (id | name | colour):\n${listing}\nPick up to 3 closet ids that pair well with it. `
             : "") +
@@ -480,7 +482,21 @@ export async function scanItem(
         name: str,
         category: { type: "STRING", enum: [...CLOSET_CATEGORIES] },
         colors: swatches,
-        details: list,
+        details: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              type: {
+                type: "STRING",
+                enum: ["fabric", "fit", "collar", "graphic", "other"],
+              },
+              label: str,
+              value: str,
+            },
+            required: ["type", "label", "value"],
+          },
+        },
         vibe: str,
         vibeLine: str,
         price: str,
@@ -489,6 +505,59 @@ export async function scanItem(
         verdict: str,
         pairs: list,
         idea: str,
+        verdicts: {
+          type: "OBJECT",
+          properties: {
+            style: {
+              type: "OBJECT",
+              properties: {
+                value: str,
+                status: { type: "STRING", enum: ["good", "mixed", "poor"] },
+                label: str,
+              },
+              required: ["value", "status", "label"],
+            },
+            colour: {
+              type: "OBJECT",
+              properties: {
+                value: str,
+                status: { type: "STRING", enum: ["good", "mixed", "poor"] },
+                label: str,
+              },
+              required: ["value", "status", "label"],
+            },
+          },
+          required: ["style", "colour"],
+        },
+        annotations: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              label: str,
+              point: {
+                type: "OBJECT",
+                properties: { x: { type: "NUMBER" }, y: { type: "NUMBER" } },
+                required: ["x", "y"],
+              },
+            },
+            required: ["label"],
+          },
+        },
+        pairing: {
+          type: "OBJECT",
+          properties: { name: str, hex: str },
+          required: ["name", "hex"],
+        },
+        priceRange: {
+          type: "OBJECT",
+          properties: {
+            low: { type: "NUMBER" },
+            high: { type: "NUMBER" },
+            currency: { type: "STRING", enum: ["USD"] },
+          },
+          required: ["low", "high", "currency"],
+        },
       },
       required: [
         "name",
@@ -503,11 +572,106 @@ export async function scanItem(
         "verdict",
         "pairs",
         "idea",
+        "verdicts",
+        "annotations",
+        "pairing",
+        "priceRange",
       ],
     },
     request,
   );
   const score = Math.round(Number(out.score));
+  const detailTypes = ["fabric", "fit", "collar", "graphic", "other"] as const;
+  const details = (Array.isArray(out.details) ? out.details : [])
+    .map((detail: unknown) => {
+      if (typeof detail === "string")
+        return {
+          type: "other" as const,
+          label: "Detail",
+          value: line(detail, 100),
+        };
+      if (!detail || typeof detail !== "object") return null;
+      const item = detail as Record<string, unknown>;
+      const type = detailTypes.includes(
+        item.type as (typeof detailTypes)[number],
+      )
+        ? (item.type as (typeof detailTypes)[number])
+        : "other";
+      return {
+        type,
+        label: line(item.label, 24) || "Detail",
+        value: line(item.value, 100),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => !!item?.value)
+    .slice(0, 4);
+  const status = (value: unknown): "good" | "mixed" | "poor" =>
+    value === "good" || value === "poor" ? value : "mixed";
+  const verdict = (value: unknown, fallback: string) => {
+    const item =
+      value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {};
+    const s = status(item.status);
+    return {
+      value: line(item.value, 40) || fallback,
+      status: s,
+      label:
+        line(item.label, 24) ||
+        (s === "good" ? "Spot on" : s === "poor" ? "Not quite" : "A bit off"),
+    };
+  };
+  const rawRange =
+    out.priceRange && typeof out.priceRange === "object"
+      ? (out.priceRange as Record<string, unknown>)
+      : {};
+  const parsedRange = [...line(out.price, 30).matchAll(/\d+(?:\.\d+)?/g)].map(
+    (m) => Number(m[0]),
+  );
+  const low = Number(rawRange.low ?? parsedRange[0]);
+  const high = Number(rawRange.high ?? parsedRange[1] ?? low);
+  const rawPairing =
+    out.pairing && typeof out.pairing === "object"
+      ? (out.pairing as Record<string, unknown>)
+      : {};
+  const pairing =
+    line(rawPairing.name, 30) && /^#[0-9a-f]{6}$/i.test(line(rawPairing.hex, 7))
+      ? {
+          name: line(rawPairing.name, 30),
+          hex: line(rawPairing.hex, 7).toUpperCase(),
+        }
+      : undefined;
+  const rawVerdicts =
+    out.verdicts && typeof out.verdicts === "object"
+      ? (out.verdicts as Record<string, unknown>)
+      : {};
+  const annotations = (Array.isArray(out.annotations) ? out.annotations : [])
+    .map((value: unknown) => {
+      if (!value || typeof value !== "object") return null;
+      const item = value as Record<string, unknown>;
+      const label = line(item.label, 60);
+      const point =
+        item.point && typeof item.point === "object"
+          ? (item.point as Record<string, unknown>)
+          : null;
+      const x = Number(point?.x),
+        y = Number(point?.y);
+      return label
+        ? {
+            label,
+            ...(Number.isFinite(x) &&
+            Number.isFinite(y) &&
+            x >= 0 &&
+            x <= 1 &&
+            y >= 0 &&
+            y <= 1
+              ? { point: { x, y } }
+              : {}),
+          }
+        : null;
+    })
+    .filter((item): item is NonNullable<typeof item> => !!item)
+    .slice(0, 3);
   return {
     name: line(out.name, 80),
     category: CLOSET_CATEGORIES.includes(
@@ -516,12 +680,12 @@ export async function scanItem(
       ? (out.category as string)
       : "Other",
     colors: colors(out.colors).slice(0, 3),
-    details: lines(out.details, 4),
+    details,
     vibe: line(out.vibe, 30),
     vibeLine: line(out.vibeLine, 140),
     price: line(out.price, 20),
     query: line(out.query, 90),
-    score: Number.isFinite(score) ? Math.min(10, Math.max(1, score)) : 7,
+    score: Number.isFinite(score) ? Math.min(10, Math.max(0, score)) : 7,
     verdict: line(out.verdict, 160),
     pairs: (Array.isArray(out.pairs) ? out.pairs : [])
       .map(String)
@@ -529,5 +693,15 @@ export async function scanItem(
       .slice(0, 3)
       .map((id) => ({ id, name: byId.get(id)! })),
     idea: line(out.idea, 160),
+    verdicts: {
+      style: verdict(rawVerdicts.style, line(out.vibe, 30) || "Personal style"),
+      colour: verdict(rawVerdicts.colour, me.season || "Your colours"),
+    },
+    annotations,
+    pairing,
+    priceRange:
+      Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low
+        ? { low, high, currency: "USD" as const }
+        : undefined,
   };
 }

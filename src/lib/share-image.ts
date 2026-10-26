@@ -2,7 +2,10 @@ import { Platform } from "react-native";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system/legacy";
 
-export async function sharePreview(signedUrl: string) {
+export async function sharePreview(
+  signedUrl: string,
+  title = "Outfit League · AI preview",
+) {
   if (Platform.OS === "web") {
     const response = await fetch(signedUrl);
     if (!response.ok)
@@ -14,7 +17,7 @@ export async function sharePreview(signedUrl: string) {
     if (navigator.canShare?.({ files: [file] }))
       await navigator.share({
         files: [file],
-        title: "Outfit League · AI preview",
+        title,
       });
     else {
       const url = URL.createObjectURL(blob),
@@ -38,7 +41,7 @@ export async function sharePreview(signedUrl: string) {
     await Sharing.shareAsync(path, {
       mimeType: "image/jpeg",
       UTI: "public.jpeg",
-      dialogTitle: "Share your AI preview",
+      dialogTitle: title,
     });
   } finally {
     await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});

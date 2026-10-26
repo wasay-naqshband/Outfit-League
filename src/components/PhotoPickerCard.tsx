@@ -51,7 +51,7 @@ export function PhotoPickerCard({
                 bottom: 0,
               }}
               contentFit="cover"
-              cachePolicy="none"
+              cachePolicy="memory"
               accessibilityLabel={
                 person ? "Your selected photo" : "Selected clothing item"
               }

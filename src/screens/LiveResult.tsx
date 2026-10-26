@@ -47,6 +47,10 @@ export default function LiveResult({ id }: { id: string }) {
   const spin = view?.spin;
   const spinStart = useRef(0);
   const [spinOpen, setSpinOpen] = useState(true);
+  useEffect(() => {
+    if (view?.beforeUrl)
+      void Image.prefetch(view.beforeUrl, "memory").catch(() => {});
+  }, [view?.beforeUrl]);
   // Opening the 360° tab shows the full-screen viewer again.
   useEffect(() => setSpinOpen(true), [segment]);
   useEffect(() => setImageError(false), [uri]);
@@ -257,7 +261,7 @@ export default function LiveResult({ id }: { id: string }) {
                     <Image
                       source={{ uri }}
                       contentFit="contain"
-                      cachePolicy="none"
+                      cachePolicy="memory"
                       style={{ width: "100%", height: "100%" }}
                       accessibilityLabel={
                         segment === "Before"
@@ -361,30 +365,6 @@ export default function LiveResult({ id }: { id: string }) {
               ) : (
                 !view.job.outfit && <Lookalikes id={id} />
               )}
-              <Button
-                secondary
-                title="Your private look history"
-                onPress={() => router.push("/history")}
-              />
-              <Button
-                secondary
-                icon="shopping-bag"
-                title="Shop similar styles"
-                onPress={() =>
-                  router.push({ pathname: "/shop", params: { job: id } })
-                }
-              />
-              <Button
-                secondary
-                title="Try another outfit"
-                icon="sparkles"
-                onPress={() => router.replace("/(tabs)/try-on")}
-              />
-              <Body style={{ fontSize: 13 }}>
-                Private until you choose to share. AI previews show style, not
-                garment fit or sizing. Shopping searches saved details and
-                manually selected categories; it does not identify this image.
-              </Body>
             </>
           )}
         </View>

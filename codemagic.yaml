@@ -15,7 +15,7 @@ workflows:
         - outfit_league
       ios_signing:
         provisioning_profiles:
-          - outfit-league-main-apple
+          - outfit-league-main-push
           - outfit-league-share
         certificates:
           - Outfit League certificate

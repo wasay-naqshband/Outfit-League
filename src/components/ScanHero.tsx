@@ -61,9 +61,10 @@ function Bracket({ corner }: { corner: "tl" | "tr" | "bl" | "br" }) {
 
 // Decorative "what a scan looks like" loop: not a live camera.
 export function ScanViewfinderHero() {
-  const width = useWindowDimensions().width - 40;
-  const height = Math.round((width * 340) / 350);
-  const k = width / 350;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const width = windowWidth - 40;
+  const k = Math.min(width / 350, (windowHeight * 0.34) / 340);
+  const height = Math.round(340 * k);
   const reduce = useReduceMotion();
   const line = useRef(new Animated.Value(0.5)).current;
   const ping = useRef(new Animated.Value(0)).current;

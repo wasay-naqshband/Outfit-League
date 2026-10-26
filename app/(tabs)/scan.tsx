@@ -21,6 +21,7 @@ import {
 } from "../../src/components/ScanHero";
 import { LinearGradient } from "expo-linear-gradient";
 import { PieceOptions } from "../../src/components/ShopTheLook";
+import { ScanReport } from "../../src/components/ScanReport";
 import { useApp } from "../../src/lib/state";
 import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import { styleLabel, useOnboarding } from "../../src/lib/onboarding";
@@ -30,6 +31,7 @@ import { saveLibraryItem } from "../../src/lib/library";
 import { scanPhoto, type Lookalike, type Scan } from "../../src/lib/tryon-api";
 import { friendlyError, type LocalPhoto } from "../../src/types/tryon";
 import { colors, fonts, gradients, shadow } from "../../src/theme";
+import { sharePreview } from "../../src/lib/share-image";
 
 const MESSAGES = [
   "Zooming in on the details…",
@@ -66,6 +68,7 @@ export default function ScanTab() {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [limited, setLimited] = useState(false);
   const startedAt = useRef(0);
@@ -105,7 +108,8 @@ export default function ScanTab() {
     }
   }
   async function save() {
-    if (!photo || !result || saved) return;
+    if (!photo || !result || saved || saving) return;
+    setSaving(true);
     setError("");
     try {
       const { scan } = result;
@@ -116,7 +120,9 @@ export default function ScanTab() {
           category: scan.category,
           color: scan.colors[0]?.name ?? "",
           brand: "",
-          notes: [scan.vibeLine, ...scan.details].filter(Boolean).join(" · "),
+          notes: [scan.vibeLine, ...scan.details.map((detail) => detail.value)]
+            .filter(Boolean)
+            .join(" · "),
           tags: scan.vibe,
           source_url: "",
         },
@@ -126,10 +132,43 @@ export default function ScanTab() {
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn’t save. Try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
   const scan = result?.scan;
+  if (scan && photo && !busy)
+    return (
+      <ScanReport
+        photo={photo}
+        scan={scan}
+        items={result.items}
+        saved={saved}
+        saving={saving}
+        error={error}
+        onBack={() => {
+          void disposePhoto(photo);
+          setPhoto(null);
+          setResult(null);
+          setSaved(false);
+        }}
+        onShare={() => {
+          void sharePreview(photo.uri, scan.name).catch(() =>
+            setError("We couldn’t share that scan. Please try again."),
+          );
+        }}
+        onSave={() => void save()}
+        onTryOn={() => {
+          draft.setGarment(photo);
+          setPhoto(null);
+          setResult(null);
+          router.push("/(tabs)/try-on");
+        }}
+        onScanAnother={() => void snap(Platform.OS !== "web")}
+        onGallery={() => void snap(false)}
+      />
+    );
   return (
     <Page>
       <LinearGradient
@@ -193,7 +232,9 @@ export default function ScanTab() {
                 onPress={() => void snap(false)}
               />
             </View>
-            <HowScanWorks />
+            <View style={{ marginBottom: 28 }}>
+              <HowScanWorks />
+            </View>
           </>
         )}
         {!!error && (
@@ -222,8 +263,14 @@ export default function ScanTab() {
           <>
             <Image
               source={{ uri: photo.uri }}
-              contentFit="cover"
-              style={{ height: 300, borderRadius: 28 }}
+              contentFit="contain"
+              style={{
+                width: "100%",
+                aspectRatio: photo.width / photo.height,
+                maxHeight: 520,
+                borderRadius: 28,
+                backgroundColor: colors.chip,
+              }}
             />
             <View style={{ gap: 6 }}>
               <Heading size={26}>{scan.name}</Heading>
@@ -316,12 +363,12 @@ export default function ScanTab() {
               <View style={card}>
                 <Text style={label}>DETAILS</Text>
                 {scan.details.map((d) => (
-                  <Body key={d} style={{ fontSize: 14 }}>
-                    • {d}
+                  <Body key={d.label + d.value} style={{ fontSize: 14 }}>
+                    {d.label}: {d.value}
                   </Body>
                 ))}
                 {!!scan.idea && (
-                  <Body style={{ fontSize: 14 }}>💡 {scan.idea}</Body>
+                  <Body style={{ fontSize: 14 }}>{scan.idea}</Body>
                 )}
               </View>
             )}

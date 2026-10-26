@@ -72,7 +72,12 @@
       "expo-web-browser",
       "expo-apple-authentication",
       "expo-localization",
-      "./plugins/without-push-entitlement"
+      [
+        "expo-notifications",
+        {
+          "mode": "production"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

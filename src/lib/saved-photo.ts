@@ -1,4 +1,4 @@
-import { decode, encode } from "base64-arraybuffer";
+import { decode } from "base64-arraybuffer";
 import { supabase } from "./supabase";
 import type { LocalPhoto } from "../types/tryon";
 
@@ -9,15 +9,17 @@ const path = (owner: string) => `${owner}/person.jpg`;
 export async function loadSavedPhoto(
   owner: string,
 ): Promise<LocalPhoto | null> {
-  const { data, error } = await bucket().download(path(owner));
+  const { data, error } = await bucket().createSignedUrl(
+    path(owner),
+    60 * 60 * 24 * 7,
+  );
   // Not found is the normal "no saved photo yet" state.
-  if (error || !data) return null;
-  const buffer = await data.arrayBuffer();
-  const base64 = encode(buffer);
+  if (error || !data?.signedUrl) return null;
   return {
-    uri: "data:image/jpeg;base64," + base64,
-    base64,
-    bytes: buffer.byteLength,
+    // Load the private preview directly. Fetch full bytes only when generating.
+    uri: data.signedUrl,
+    base64: "",
+    bytes: 0,
     width: 0,
     height: 0,
   };

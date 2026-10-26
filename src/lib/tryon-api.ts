@@ -32,14 +32,20 @@ export async function uploadPhoto(
   kind: "person" | "garment",
 ) {
   if (!supabase) throw new Error("UNAUTHORIZED");
+  const image = photo.base64
+    ? decode(photo.base64)
+    : await fetch(photo.uri).then((response) => {
+        if (!response.ok) throw new Error("PHOTO_UNAVAILABLE");
+        return response.arrayBuffer();
+      });
   const ticket = await callTryOn<{ id: string; path: string; token: string }>({
     action: "upload",
     kind,
-    size: photo.bytes,
+    size: image.byteLength,
   });
   const { error } = await supabase.storage
     .from("tryon-private")
-    .uploadToSignedUrl(ticket.path, ticket.token, decode(photo.base64), {
+    .uploadToSignedUrl(ticket.path, ticket.token, image, {
       contentType: "image/jpeg",
       upsert: false,
     });
@@ -168,7 +174,11 @@ export type Scan = {
   name: string;
   category: string;
   colors: { name: string; hex: string }[];
-  details: string[];
+  details: {
+    type: "fabric" | "fit" | "collar" | "graphic" | "other";
+    label: string;
+    value: string;
+  }[];
   vibe: string;
   vibeLine: string;
   price: string;
@@ -179,13 +189,21 @@ export type Scan = {
   /** Closet pieces it goes with */
   pairs: { id: string; name: string }[];
   idea: string;
+  verdicts?: {
+    style: { value: string; status: "good" | "mixed" | "poor"; label: string };
+    colour: { value: string; status: "good" | "mixed" | "poor"; label: string };
+  };
+  annotations?: { label: string; point?: { x: number; y: number } }[];
+  pairing?: { name: string; hex: string };
+  priceRange?: { low: number; high: number; currency: "USD" };
 };
 // This phone's app ID, so the free daily scan cap counts per phone as well as
 // per account. ponytail: resets on reinstall and can be faked; Apple
 // DeviceCheck if people get around it.
 async function deviceId() {
   try {
-    if (Platform.OS === "ios") return await Application.getIosIdForVendorAsync();
+    if (Platform.OS === "ios")
+      return await Application.getIosIdForVendorAsync();
     if (Platform.OS === "android") return Application.getAndroidId();
   } catch {
     /* no id: the account cap still applies */
@@ -196,12 +214,33 @@ async function deviceId() {
 export async function scanPhoto(photo: LocalPhoto, styles: string[]) {
   const id = await uploadPhoto(photo, "garment");
   try {
-    return await callTryOn<{ scan: Scan; items: Lookalike[] }>({
+    const result = await callTryOn<{ scan: Scan; items: Lookalike[] }>({
       action: "scan",
       id,
       styles,
       device: await deviceId(),
     });
+    // Older deployed scan functions return plain strings until their update lands.
+    const details = (
+      Array.isArray(result.scan.details)
+        ? (result.scan.details as unknown[])
+        : []
+    ).flatMap((detail) => {
+      if (typeof detail === "string")
+        return [{ type: "other" as const, label: "Detail", value: detail }];
+      if (!detail || typeof detail !== "object") return [];
+      const item = detail as Partial<Scan["details"][number]>;
+      return typeof item.value === "string"
+        ? [
+            {
+              type: item.type ?? "other",
+              label: item.label || "Detail",
+              value: item.value,
+            },
+          ]
+        : [];
+    });
+    return { ...result, scan: { ...result.scan, details } };
   } finally {
     void callTryOn({ action: "remove-upload", id }).catch(() => {});
   }

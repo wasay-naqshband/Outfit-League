@@ -28,6 +28,7 @@ import {
   copyBattleLink,
   shareBattleLink,
   whatsappBattleLink,
+  shareBattleComment,
   rememberBattleReturn,
   type BattleView,
   type Side,
@@ -141,6 +142,7 @@ export default function BattleDetail() {
   const [name, setName] = useState("");
   const [consent, setConsent] = useState(false);
   const [comment, setComment] = useState("");
+  const [replyTo, setReplyTo] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [more, setMore] = useState(false);
@@ -202,6 +204,15 @@ export default function BattleDetail() {
       if (e instanceof Error && e.name !== "AbortError") setMessage(e.message);
     }
   }
+  async function shareComment(commentName: string, body: string) {
+    try {
+      await shareBattleComment(id, commentName, body);
+      setMessage("Comment shared.");
+    } catch (error) {
+      if (error instanceof Error && error.name !== "AbortError")
+        setMessage(error.message);
+    }
+  }
   function signIn() {
     void rememberBattleReturn(id).then(() => router.push("/auth"));
   }
@@ -255,6 +266,81 @@ export default function BattleDetail() {
       battle.isFriend ||
       battle.status === "closed");
   const challenger = battle?.players?.a;
+  function renderComment(c: BattleView["comments"][number], nested = false) {
+    return (
+      <View
+        key={c.id}
+        style={{ gap: 6, marginLeft: nested ? 40 : 0, paddingTop: nested ? 8 : 0 }}
+      >
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Avatar name={c.name} size={32} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>{c.name}</Text>
+            <Body style={{ fontSize: 15, color: colors.ink }}>{c.body}</Body>
+          </View>
+          {(c.mine || battle?.isOwner) && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete comment"
+              disabled={busy}
+              onPress={() => void action("uncomment", { commentId: c.id })}
+              style={{ padding: 6 }}
+            >
+              <Icon name="x" size={16} color={colors.text3} />
+            </Pressable>
+          )}
+          {!c.mine && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Report or block ${c.name}`}
+              onPress={() => setMenu(menu === c.id ? null : c.id)}
+              style={{ paddingHorizontal: 6, paddingVertical: 2 }}
+            >
+              <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.text3 }}>⋯</Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={{ flexDirection: "row", gap: 16, marginLeft: 42 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={c.liked ? "Unlike comment" : "Like comment"}
+            disabled={busy}
+            onPress={() => void action("like-comment", { commentId: c.id })}
+          >
+            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: c.liked ? colors.ink : colors.text3 }}>
+              {c.liked ? "♥" : "♡"} Like{c.likes ? ` · ${c.likes}` : ""}
+            </Text>
+          </Pressable>
+          {!nested && live && (
+            <Pressable onPress={() => setReplyTo(c.id)} accessibilityRole="button">
+              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.text3 }}>Reply</Text>
+            </Pressable>
+          )}
+          <Pressable onPress={() => void shareComment(c.name, c.body)} accessibilityRole="button">
+            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.text3 }}>Share</Text>
+          </Pressable>
+        </View>
+        {menu === c.id && (
+          <View style={{ flexDirection: "row", gap: 8, marginLeft: 42 }}>
+            {reported.includes(c.id) ? (
+              <Body style={{ fontSize: 13 }}>Reported. Thanks, we’ll review it.</Body>
+            ) : (
+              <>
+                <Pill
+                  label="Report"
+                  onPress={() => void action("report-comment", { commentId: c.id }).then((ok) => ok && setReported((r) => [...r, c.id]))}
+                />
+                <Pill
+                  label={`Block ${c.name}`}
+                  onPress={() => void action("block", { commentId: c.id }).then((ok) => ok && setMessage(`You won’t see comments from ${c.name} any more.`))}
+                />
+              </>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <Page>
@@ -349,6 +435,11 @@ export default function BattleDetail() {
         ) : (
           <>
             <Heading size={28}>{battle.title}</Heading>
+            {live && (
+              <Body style={{ textAlign: "center", fontSize: 14 }}>
+                Anyone with this link can vote and comment—no sign-up or sign-in needed.
+              </Body>
+            )}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <Chip
                 text={
@@ -374,9 +465,7 @@ export default function BattleDetail() {
               </Body>
             )}
             {canVote &&
-              (battle.mode === "public" && !session ? (
-                <Button title="Sign in to vote" onPress={signIn} />
-              ) : (
+              (
                 <>
                   {battle.mode === "public" && (
                     <>
@@ -429,7 +518,7 @@ export default function BattleDetail() {
                           )}
                         </View>
                         <Body style={{ flex: 1, fontSize: 13 }}>
-                          Show my name with my vote
+                          Show my name and vote publicly
                         </Body>
                       </Pressable>
                     </>
@@ -457,7 +546,7 @@ export default function BattleDetail() {
                     }
                   />
                 </>
-              ))}
+              )}
             {["published", "closed"].includes(battle.status) && (
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <Button
@@ -515,6 +604,11 @@ export default function BattleDetail() {
                   Comments
                   {battle.comments.length ? ` · ${battle.comments.length}` : ""}
                 </Heading>
+                <Body style={{ fontSize: 13 }}>
+                  {live
+                    ? "Anyone with this link can comment while the battle is live—no account needed."
+                    : "Comments are closed with this battle."}
+                </Body>
                 {!battle.comments.length && (
                   <Body style={{ fontSize: 14 }}>
                     {live
@@ -522,95 +616,20 @@ export default function BattleDetail() {
                       : "No comments."}
                   </Body>
                 )}
-                {battle.comments.map((c) => (
+                {battle.comments.filter((c) => !c.parentId).map((c) => (
                   <View key={c.id} style={{ gap: 6 }}>
-                    <View style={{ flexDirection: "row", gap: 10 }}>
-                      <Avatar name={c.name} size={32} />
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>
-                          {c.name}
-                        </Text>
-                        <Body style={{ fontSize: 15, color: colors.ink }}>
-                          {c.body}
-                        </Body>
-                      </View>
-                      {(c.mine || battle.isOwner) && (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Delete comment"
-                          disabled={busy}
-                          onPress={() =>
-                            void action("uncomment", { commentId: c.id })
-                          }
-                          style={{ padding: 6 }}
-                        >
-                          <Icon name="x" size={16} color={colors.text3} />
-                        </Pressable>
-                      )}
-                      {!c.mine && (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Report or block ${c.name}`}
-                          onPress={() => setMenu(menu === c.id ? null : c.id)}
-                          style={{ paddingHorizontal: 6, paddingVertical: 2 }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: fonts.bold,
-                              fontSize: 18,
-                              color: colors.text3,
-                            }}
-                          >
-                            ⋯
-                          </Text>
-                        </Pressable>
-                      )}
-                    </View>
-                    {menu === c.id && (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          gap: 8,
-                          marginLeft: 42,
-                        }}
-                      >
-                        {reported.includes(c.id) ? (
-                          <Body style={{ fontSize: 13 }}>
-                            Reported. Thanks, we’ll review it.
-                          </Body>
-                        ) : (
-                          <>
-                            <Pill
-                              label="Report"
-                              onPress={() =>
-                                void action("report-comment", {
-                                  commentId: c.id,
-                                }).then(
-                                  (ok) =>
-                                    ok && setReported((r) => [...r, c.id]),
-                                )
-                              }
-                            />
-                            <Pill
-                              label={`Block ${c.name}`}
-                              onPress={() =>
-                                void action("block", { commentId: c.id }).then(
-                                  (ok) =>
-                                    ok &&
-                                    setMessage(
-                                      `You won’t see comments from ${c.name} any more.`,
-                                    ),
-                                )
-                              }
-                            />
-                          </>
-                        )}
-                      </View>
-                    )}
+                    {renderComment(c)}
+                    {battle.comments.filter((reply) => reply.parentId === c.id).map((reply) => renderComment(reply, true))}
                   </View>
                 ))}
                 {live && (
                   <>
+                    {replyTo !== null && (
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <Body style={{ fontSize: 13 }}>Replying to {battle.comments.find((c) => c.id === replyTo)?.name}</Body>
+                        <Pressable onPress={() => setReplyTo(null)} accessibilityRole="button"><Text style={{ color: colors.text3 }}>Cancel</Text></Pressable>
+                      </View>
+                    )}
                     {!profile.data?.name && (
                       <TextInput
                         accessibilityLabel="Your name"
@@ -641,7 +660,7 @@ export default function BattleDetail() {
                         value={comment}
                         onChangeText={setComment}
                         maxLength={280}
-                        placeholder="Add a comment…"
+                        placeholder={replyTo === null ? "Add a comment…" : "Write a reply…"}
                         placeholderTextColor={colors.placeholder}
                         style={{
                           flex: 1,
@@ -660,8 +679,8 @@ export default function BattleDetail() {
                           busy || !comment.trim() || name.trim().length < 2
                         }
                         onPress={() =>
-                          void action("comment", { name, body: comment }).then(
-                            (ok) => ok && setComment(""),
+                          void action("comment", { name, body: comment, parentId: replyTo }).then(
+                            (ok) => { if (ok) { setComment(""); setReplyTo(null); } },
                           )
                         }
                         style={{

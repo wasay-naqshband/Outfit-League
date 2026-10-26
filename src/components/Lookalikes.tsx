@@ -161,11 +161,6 @@ export function Lookalikes({ id }: { id: string }) {
         </ScrollView>
       )}
       {!!error && <Body style={{ fontSize: 14 }}>{error}</Body>}
-      <Body style={{ fontSize: 11 }}>
-        Similar styles from other stores, not the exact item. Prices from Google
-        Shopping; check the store before you buy. We may earn a commission from
-        some links.
-      </Body>
     </View>
   );
 }

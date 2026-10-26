@@ -74,6 +74,7 @@ export default function MyPhoto() {
               backgroundColor: colors.white,
             }}
             accessibilityLabel="Your saved try-on photo"
+            cachePolicy="memory"
           />
         ) : (
           <Heading size={28}>One great photo, every try-on.</Heading>

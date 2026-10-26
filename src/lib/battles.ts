@@ -28,10 +28,13 @@ export type BattleView = {
   voters: { id: number; choice: Side; display_name: string }[];
   comments: {
     id: number;
+    parentId: number | null;
     name: string;
     body: string;
     at: string;
     mine: boolean;
+    likes: number;
+    liked: boolean;
   }[];
 };
 export type BattleRow = {
@@ -73,7 +76,7 @@ const messages: Record<string, string> = {
   COMMENT_NOT_ALLOWED:
     "That comment breaks our community rules. Keep it kind and try again.",
   PUBLIC_IDENTITY_REQUIRED:
-    "Sign in, enter a display name and agree to show your name and vote.",
+    "Enter a name and choose whether it can appear with your vote.",
   VOTING_CLOSED: "Voting is closed for this battle.",
   INVALID_STATE:
     "This battle has changed or someone already joined. Refresh to see it.",
@@ -253,4 +256,20 @@ export async function whatsappBattleLink(id: string, text: string) {
   await Linking.openURL(
     "https://wa.me/?text=" + encodeURIComponent(`${text} ${url}`),
   );
+}
+
+export async function shareBattleComment(
+  id: string,
+  name: string,
+  body: string,
+) {
+  const url = publicBattleUrl(id);
+  if (!url) throw new Error("A public app address is needed first.");
+  const text = `${name}: “${body}”\nVote on the battle: ${url}`;
+  if (Platform.OS === "web") {
+    if (navigator.share)
+      await navigator.share({ title: "Battle comment", text, url });
+    else if (!(await Clipboard.setStringAsync(text)))
+      throw new Error("This browser couldn’t copy the comment.");
+  } else await Share.share({ message: text });
 }
