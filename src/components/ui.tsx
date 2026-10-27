@@ -244,9 +244,9 @@ export function Logo({ onPress }: { onPress?: () => void }) {
       style={s.logo}
     >
       <Image
-        source={require("../../assets/branding/outfit-league-logo.png")}
+        source={require("../../assets/branding/outfit-league-mark.png")}
         contentFit="contain"
-        accessibilityLabel="Outfit League hanger logo"
+        accessibilityLabel="Outfit League hanger and sparkle logo"
         style={s.logoImage}
       />
     </Pressable>
@@ -900,20 +900,20 @@ const s = StyleSheet.create({
     ...shadow(0.08),
   },
   logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: c.white,
     backgroundColor: c.cream,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    ...shadow(0.08),
   },
   logoImage: {
-    position: "absolute",
-    width: 112,
-    height: 112,
-    left: -37,
-    top: -23,
+    width: 46,
+    height: 46,
   },
   pill: {
     height: 44,
