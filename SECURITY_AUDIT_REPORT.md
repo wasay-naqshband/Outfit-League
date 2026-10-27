@@ -1,7 +1,7 @@
 # Outfit League security audit
 
 **Review date:** 27 October 2026  
-**Scope:** Local application source, Supabase Edge Functions and migrations, storage rules, Cloudflare Pages battle preview handlers, repository hygiene, and available local verification. This update made no production dashboard, deployment, credential, live account, or database changes.
+**Scope:** Local application source, Supabase Edge Functions and migrations, storage rules, Cloudflare Pages battle preview handlers, repository hygiene, and available local verification. Security hardening code is now deployed to the relevant production services. No production database data, Supabase project settings, or credentials were changed.
 
 ## Summary
 
@@ -19,7 +19,7 @@ Regression tests cover PKCE parsing, recovery routing, router parameters, and re
 
 The `share-preview` action no longer creates 30-day signed Storage URLs. It returns only available image sides. Social metadata now points to stable `chutni.store/battle/{id}/image/{side}` URLs. The Pages image route calls the battles function, which checks that the battle is still published, reads the private image, validates the JPEG and its size, and returns it with a five-minute cache lifetime. Unpublished battles therefore stop serving new image responses; cached copies can remain available for up to five minutes at our endpoint.
 
-WhatsApp and other supported crawlers retain stable, public preview URLs while the battle is published. Social platforms may keep their own cached or copied previews beyond our cache window, which the app cannot revoke. Previously issued 30-day Storage URLs also remain valid until they expire; the new code stops issuing them but does not change existing production URLs. No production deploy was made.
+WhatsApp and other supported crawlers retain stable, public preview URLs while the battle is published. Social platforms may keep their own cached or copied previews beyond our cache window, which the app cannot revoke. Previously issued 30-day Storage URLs also remain valid until they expire; the new code stops issuing them but does not change existing production URLs. The Pages site and compiled Functions worker are deployed to Cloudflare Pages. The homepage and battle app route load. The image proxy returned `Not found` for the previously shared sample battle ID, so a live published battle image and social-crawler metadata were not verified end to end.
 
 ### Anonymous battle voting — proportionate network throttles
 
@@ -36,7 +36,7 @@ The shopping outbound endpoint also stopped treating the first `X-Forwarded-For`
 
 ## Dashboard item: leaked-password protection
 
-The Supabase dashboard was not authenticated in this review, so the current setting could not be checked and was not changed. The implementation status file previously recorded it as disabled; treat that as an unverified prior report.
+The Supabase dashboard was checked on 27 October 2026. Leaked-password protection is off. The dashboard indicates this feature requires the Pro plan. It was not enabled and no plan was changed.
 
 To check it: open the Supabase project, go to **Authentication → Sign In / Providers → Email**, and inspect **Prevent use of leaked passwords**. If available, enable it and save; Supabase documents that leaked-password protection requires Pro or above. Then check **Authentication → Attack Protection** or rerun the Security Advisor to confirm the status. Do this in the dashboard only after reviewing the plan impact. See [Supabase password security](https://supabase.com/docs/guides/auth/password-security).
 
@@ -56,15 +56,18 @@ To check it: open the Supabase project, go to **Authentication → Sign In / Pro
 - Deno checked all five configured Edge Functions (`tryon`, `battles`, `shopping`, `account`, and `revenuecat-webhook`) — passed.
 - All 93 `tests/*.test.ts` cases — passed using an in-process TypeScript test harness. The standard Node test runner could not start worker processes in this environment (`spawn EPERM`), so the tests were executed serially in-process with their setup/teardown hooks.
 - `git diff --check` — passed; Git emitted only line-ending normalization warnings.
-- `node scripts/audit-web-release.cjs` — passed: 39 built web files, SPA fallback/domain configured, no environment files, and no private server secrets.
+- `node scripts/audit-web-release.cjs` — passed: 39 built web files, SPA fallback/domain configured, no environment files, and no private server secrets. A subsequent Cloudflare Pages deployment included the compiled battle Functions worker; Cloudflare reported success and `chutni.store` served the updated app.
+- Supabase production Edge Function versions — `tryon` v51, `battles` v18, and `shopping` v9 deployed successfully. No database migrations or records were changed.
+- Codemagic build — commit `b3d4ffc` produced signed iOS build 0.1.0 (132); the IPA artifact is present, and App Store Connect lists build 132 as **Ready to Submit**, attached to the private **Owner auto** internal group (one tester). This is not an App Store release.
+- Cloudflare Pages production deployment succeeded. The battle image proxy route reached the deployed handler, but the sample battle ID returned `Not found`; a currently published battle is needed to validate an actual preview image.
 - Dependency advisory audit — **not completed**. `pnpm audit --offline` could not reach `registry.npmjs.org` (`ECONNREFUSED`). No dependency changes were made, and no clean bill of health is claimed.
-- Supabase leaked-password setting, hosted forwarded-IP behavior, production deployment, and external social-platform cache behavior — not verified.
+- Hosted forwarded-IP behavior and external social-platform cache behavior — not verified.
 
 ## Remaining risks and before-production work
 
-1. Confirm the current Supabase leaked-password setting in the dashboard using the steps above.
+1. Enable leaked-password protection only after moving to a plan that includes it, if desired.
 2. Verify the deployed Supabase API gateway overwrites/supplies `CF-Connecting-IP`; if not, keep guest-token limits and configure a trusted edge source before enabling network limits.
-3. Run live sign-up confirmation, password recovery, and OAuth callbacks on web and iOS before publishing the PKCE-only callback.
-4. Social networks may retain image previews after unpublishing; previously created 30-day signed URLs remain valid until expiry. New app previews use the publication-checked proxy after deployment.
+3. Run live sign-up confirmation, password recovery, and OAuth callbacks on web and iOS before App Store release; the current iOS beta is available as build 132 in the private internal group.
+4. Verify battle image previews with an active published battle. Social networks may retain image previews after unpublishing; previously created 30-day signed URLs remain valid until expiry. New app previews use the publication-checked proxy.
 5. Repeat `pnpm audit` with registry access and resolve any reported advisories before production.
-6. Re-run a hosted authorization/security review against the deployed Supabase project and current production build. No production changes were made in this pass.
+6. Re-run a hosted authorization/security review against the deployed Supabase project and current production build. The functions and web bundle are deployed; database contents and project settings were not changed.
