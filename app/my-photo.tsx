@@ -17,7 +17,7 @@ import { useSavedPhoto } from "../src/lib/queries";
 import { useTryOnDraft } from "../src/lib/tryon-draft";
 import { pickPhoto } from "../src/lib/photos";
 import { removeSavedPhoto, saveSavedPhoto } from "../src/lib/saved-photo";
-import { colors, fonts } from "../src/theme";
+import { colors, fonts, shadow } from "../src/theme";
 
 export default function MyPhoto() {
   const { session } = useApp();
@@ -36,7 +36,10 @@ export default function MyPhoto() {
       if (!picked) return;
       setBusy(true);
       await saveSavedPhoto(session.user.id, picked);
-      client.setQueryData(["saved-photo", session.user.id], picked);
+      // Refetch the stored copy: the picked file is temporary and gets deleted.
+      await client.invalidateQueries({
+        queryKey: ["saved-photo", session.user.id],
+      });
       draft.setPerson(picked);
       router.back();
     } catch (e) {
@@ -65,17 +68,43 @@ export default function MyPhoto() {
       <FlatHeader title="Your photo" />
       <View style={{ padding: 20, gap: 16 }}>
         {photo ? (
-          <Image
-            source={{ uri: photo.uri }}
-            contentFit="contain"
+          <View
             style={{
-              height: 360,
+              aspectRatio: 4 / 5,
               borderRadius: 28,
-              backgroundColor: colors.white,
+              overflow: "hidden",
+              backgroundColor: colors.ink,
+              ...shadow(0.18),
             }}
-            accessibilityLabel="Your saved try-on photo"
-            cachePolicy="memory"
-          />
+          >
+            <Image
+              source={{ uri: photo.uri }}
+              contentFit="cover"
+              contentPosition="top"
+              transition={200}
+              style={{ flex: 1 }}
+              accessibilityLabel="Your saved try-on photo"
+            />
+            <View
+              style={{
+                position: "absolute",
+                left: 14,
+                bottom: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                backgroundColor: colors.white,
+                borderRadius: 999,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+              }}
+            >
+              <Icon name="check" size={16} />
+              <Text style={{ fontFamily: fonts.bold, fontSize: 13 }}>
+                Used for every try-on
+              </Text>
+            </View>
+          </View>
         ) : (
           <Heading size={28}>One great photo, every try-on.</Heading>
         )}

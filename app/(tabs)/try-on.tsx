@@ -142,7 +142,9 @@ export default function TryOn() {
     const photo = draft.person;
     if (!owner || !photo || !saved.isSuccess || saved.data) return;
     void saveSavedPhoto(owner, photo)
-      .then(() => queryClient.setQueryData(["saved-photo", owner], photo))
+      .then(() =>
+        queryClient.invalidateQueries({ queryKey: ["saved-photo", owner] }),
+      )
       .catch(() => {});
   }, [session?.user.id, saved.isSuccess, saved.data, draft.person]);
   // The person photo can change from the My photo screen; drop an upload made

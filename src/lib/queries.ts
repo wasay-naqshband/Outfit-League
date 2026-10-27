@@ -82,6 +82,7 @@ export function useSavedPhoto() {
     queryKey: ["saved-photo", id],
     queryFn: () => loadSavedPhoto(id!),
     enabled: !!id && !!supabase,
-    staleTime: Infinity,
+    // The signed link lasts 7 days; refresh before it expires.
+    staleTime: 1000 * 60 * 60 * 24 * 6,
   });
 }
