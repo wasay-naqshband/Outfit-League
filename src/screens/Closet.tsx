@@ -185,8 +185,8 @@ export default function Closet() {
                     <Icon name="plus" size={30} />
                     <StickerBadge>Just for you</StickerBadge>
                   </View>
-                  <Heading size={28}>Build your real-life closet.</Heading>
-                  <Body>Add a photo, name it, and try it on anytime.</Body>
+                  <Heading size={28}>Add clothes to your closet.</Heading>
+                  <Body>Snap or pick a piece. We’ll name and sort it.</Body>
                 </LinearGradient>
               </Pressable>
             )}
