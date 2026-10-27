@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -93,12 +100,15 @@ export function Lookalikes({ id }: { id: string }) {
           No close lookalikes found for this item yet.
         </Body>
       ) : query.isPending ? (
-        // Same animated wait as the try-on, sized to sit inside the result.
-        <CookingLoader
-          messages={LOOKALIKE_MESSAGES}
-          seconds={20}
-          height={270}
-        />
+        // Same full-screen wait as the try-on; closing goes back to the result.
+        <Modal visible animationType="fade" statusBarTranslucent>
+          <CookingLoader
+            fullScreen
+            messages={LOOKALIKE_MESSAGES}
+            seconds={20}
+            onClose={() => setAsked(false)}
+          />
+        </Modal>
       ) : (
         <ScrollView
           horizontal

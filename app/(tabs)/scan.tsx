@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Modal, Platform, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -207,13 +207,14 @@ export default function ScanTab() {
         </View>
       </LinearGradient>
       <View style={{ paddingHorizontal: 20, paddingTop: 16, gap: 18 }}>
-        {busy && (
+        <Modal visible={busy} animationType="fade" statusBarTranslucent>
           <CookingLoader
+            fullScreen
             messages={MESSAGES}
             seconds={20}
             startedAt={startedAt.current}
           />
-        )}
+        </Modal>
         {!busy && !scan && (
           <>
             <ScanViewfinderHero />

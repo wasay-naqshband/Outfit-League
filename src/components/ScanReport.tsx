@@ -295,6 +295,13 @@ export function ScanReport({
 
         <View style={{ paddingTop: 26, gap: 28 }}>
           <View style={{ paddingHorizontal: 20, gap: 14 }}>
+            <StickerBadge
+              size={18}
+              rotate="-4deg"
+              style={{ alignSelf: "flex-start" }}
+            >
+              Vibe check
+            </StickerBadge>
             <View
               style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}
             >
@@ -309,9 +316,10 @@ export function ScanReport({
                   accessibilityLabel={`Score ${scan.score} out of 10. ${scan.verdict}`}
                   style={{
                     fontFamily: fonts.heading,
-                    fontSize: 112,
-                    lineHeight: 90,
-                    letterSpacing: -5,
+                    // lineHeight below fontSize clips the top of the digit on iOS.
+                    fontSize: 96,
+                    lineHeight: 104,
+                    letterSpacing: -4,
                     color: colors.ink,
                   }}
                 >
@@ -326,13 +334,6 @@ export function ScanReport({
                 >
                   /10
                 </Text>
-                <StickerBadge
-                  size={20}
-                  rotate="8deg"
-                  style={{ position: "absolute", left: 36, top: -22 }}
-                >
-                  Vibe check
-                </StickerBadge>
               </View>
               <Body
                 style={{
@@ -920,7 +921,11 @@ function MeterBlock({
         style={{
           flex: 1,
           borderRadius: 3,
-          backgroundColor: highlight ? colors.yellow : colors.ink,
+          backgroundColor: highlight
+            ? colors.yellow
+            : filled
+              ? colors.ink
+              : "transparent",
           opacity: progress,
           transform: [
             {
