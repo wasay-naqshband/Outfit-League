@@ -30,6 +30,7 @@
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo-google-fonts/figtree": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
+    "@react-navigation/native": "^7.5.1",
     "@supabase/supabase-js": "^2.99.0",
     "@tanstack/react-query": "^5.104.4",
     "base64-arraybuffer": "^1.0.2",
