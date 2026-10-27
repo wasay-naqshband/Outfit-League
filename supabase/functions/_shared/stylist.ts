@@ -411,7 +411,8 @@ export async function labelGarment(
       {
         text:
           "Label the main clothing item in this photo for a wardrobe app: a short name (2 to 5 words, colour + item, e.g. 'Light blue denim jacket'), " +
-          "its category, its main colour in plain words, and the brand only if a logo or label is clearly readable (otherwise empty).",
+          "its category, its main colour in plain words, its style in 1 to 2 words (e.g. Streetwear, Old money, Minimal, Sporty, Classic), " +
+          "and the brand only if a logo or label is clearly readable (otherwise empty).",
       },
     ],
     {
@@ -420,9 +421,10 @@ export async function labelGarment(
         name: str,
         category: { type: "STRING", enum: [...CLOSET_CATEGORIES] },
         color: str,
+        style: str,
         brand: str,
       },
-      required: ["name", "category", "color", "brand"],
+      required: ["name", "category", "color", "style", "brand"],
     },
     request,
   );
@@ -435,6 +437,7 @@ export async function labelGarment(
     name: line(out.name, 60),
     category,
     color: line(out.color, 50),
+    style: line(out.style, 40),
     brand: line(out.brand, 100),
   };
 }

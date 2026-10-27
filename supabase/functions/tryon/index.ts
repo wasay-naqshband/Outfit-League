@@ -958,7 +958,7 @@ Deno.serve(async (req) => {
         const item = checked(
           await db
             .from("library_items")
-            .select("id,category,color,brand,photo_path")
+            .select("id,category,color,brand,tags,photo_path")
             .eq("id", String(body.id))
             .eq("owner_id", owner)
             .eq("kind", "wardrobe")
@@ -968,6 +968,7 @@ Deno.serve(async (req) => {
           category: string;
           color: string;
           brand: string;
+          tags: string;
           photo_path: string | null;
         } | null;
         if (!item?.photo_path) throw new Error("NOT_FOUND");
@@ -987,6 +988,7 @@ Deno.serve(async (req) => {
           ...(item.category === "Other" ? { category: label.category } : {}),
           ...(!item.color ? { color: label.color } : {}),
           ...(!item.brand ? { brand: label.brand } : {}),
+          ...(!item.tags ? { tags: label.style } : {}),
         };
         if (Object.keys(update).length)
           checked(

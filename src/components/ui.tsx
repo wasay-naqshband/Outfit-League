@@ -67,7 +67,9 @@ export type IconName =
   | "maximize"
   | "type"
   | "shirt"
-  | "heart-filled";
+  | "heart-filled"
+  | "lock"
+  | "tag";
 export function Icon({
   name,
   color = c.ink,

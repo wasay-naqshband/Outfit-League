@@ -26,7 +26,7 @@ const LOOK = {
   item: "Black zip hoodie",
 };
 
-function useReduceMotion() {
+export function useReduceMotion() {
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduce);
@@ -309,6 +309,7 @@ export function TactileButton({
   title,
   label,
   fill = colors.yellow,
+  disabled,
   onPress,
   style,
 }: {
@@ -316,19 +317,27 @@ export function TactileButton({
   title?: string;
   label?: string;
   fill?: string;
+  disabled?: boolean;
   onPress: () => void;
   style?: ViewStyle;
 }) {
   return (
     <View
       style={[
-        { height: 64, borderRadius: 22, backgroundColor: colors.ink },
+        {
+          height: 64,
+          borderRadius: 22,
+          backgroundColor: colors.ink,
+          opacity: disabled ? 0.45 : 1,
+        },
         style,
       ]}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label ?? title}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
         onPressIn={() =>
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
             () => {},

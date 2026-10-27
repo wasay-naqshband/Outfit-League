@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  Text,
   TextInput,
   View,
 } from "react-native";
-import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { getSharedPayloads, clearSharedPayloads } from "expo-sharing";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,11 +16,18 @@ import {
   Body,
   Button,
   ErrorState,
-  FlatHeader,
   Heading,
+  Icon,
   LoadingSkeleton,
   Page,
+  RoundButton,
+  StickerBadge,
 } from "../src/components/ui";
+import {
+  AddItemDropZone,
+  AutoFillChips,
+  type AutoFill,
+} from "../src/components/AddClothing";
 import {
   cleanSourceUrl,
   libraryItem,
@@ -28,7 +38,9 @@ import { disposePhoto, pickPhoto, preparePhoto } from "../src/lib/photos";
 import { useApp } from "../src/lib/state";
 import { callTryOn } from "../src/lib/tryon-api";
 import type { LocalPhoto } from "../src/types/tryon";
-import { colors, fonts } from "../src/theme";
+import { colors, fonts, gradients, shadow } from "../src/theme";
+
+type Label = { name: string; category: string; color: string; style: string };
 
 export default function LibraryEditor() {
   const params = useLocalSearchParams<{
@@ -52,6 +64,8 @@ export default function LibraryEditor() {
   const [photo, setPhoto] = useState<LocalPhoto | null>(null),
     [removePhoto, setRemovePhoto] = useState(false),
     [busy, setBusy] = useState(false),
+    [reading, setReading] = useState(false),
+    [filled, setFilled] = useState<AutoFill | null>(null),
     [error, setError] = useState("");
   const initialized = useRef<string | null>(null),
     submitted = useRef(false);
@@ -152,6 +166,7 @@ export default function LibraryEditor() {
       if (picked) {
         setPhoto(picked);
         setRemovePhoto(false);
+        setFilled(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Your photo couldn’t open.");
@@ -193,11 +208,36 @@ export default function LibraryEditor() {
         });
       };
       await refresh();
-      // AI fills name, category, colour and brand in the background.
-      if (kind === "wardrobe" && photo)
-        void callTryOn({ action: "label", id, rename: !name.trim() })
-          .then(refresh)
-          .catch(() => {});
+      // AI fills name, category, colour and style; show it before leaving.
+      if (kind === "wardrobe" && photo) {
+        setReading(true);
+        const call = callTryOn<{ label: Label }>({
+          action: "label",
+          id,
+          rename: !name.trim(),
+        });
+        // Refresh whenever it lands, even after we've moved on.
+        void call.then(refresh, () => {});
+        try {
+          const { label } = await Promise.race([
+            call,
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("slow")), 15000),
+            ),
+          ]);
+          setFilled({
+            category: label.category,
+            colour: label.color,
+            style: label.style,
+            name: name.trim() || label.name,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1100));
+        } catch {
+          // Slow or failed labelling never blocks the save.
+        } finally {
+          setReading(false);
+        }
+      }
       if (params.shared && Platform.OS !== "web") clearSharedPayloads();
       router.replace({ pathname: "/library-item/[id]", params: { id } });
     } catch (e) {
@@ -215,29 +255,97 @@ export default function LibraryEditor() {
     minHeight: 54,
     backgroundColor: colors.white,
     borderRadius: 18,
-    padding: 16,
+    paddingHorizontal: 16,
     fontFamily: fonts.body,
-    fontSize: 16,
+    fontSize: 15,
     color: colors.ink,
+    ...shadow(0.06),
   };
   const imageUri = photo?.uri ?? (!removePhoto ? query.data?.photoUrl : null);
+  const wardrobe = kind === "wardrobe";
+  const item = query.data;
+  // Existing values count as filled; a fresh AI label replaces them.
+  const chips: AutoFill = filled ?? {
+    category: item && item.category !== "Other" ? item.category : undefined,
+    colour: item?.color || undefined,
+    style: item?.tags || undefined,
+    name: item?.name || undefined,
+  };
+  const working = busy || reading;
+  const needsPhoto = wardrobe && !imageUri;
+  const cancel = () => {
+    if (params.shared && Platform.OS !== "web") clearSharedPayloads();
+    router.canGoBack() ? router.back() : router.replace("/(tabs)/closet");
+  };
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <Page keyboardInsets={false}>
-        <FlatHeader
-          title={
-            params.id
-              ? "Edit your item"
-              : kind === "wardrobe"
-                ? "Add clothing"
-                : "Save inspiration"
-          }
-          pill="Private"
-        />
-        <View style={{ padding: 20, gap: 16 }}>
+        <LinearGradient
+          colors={gradients.yellow}
+          style={{
+            borderBottomLeftRadius: 32,
+            borderBottomRightRadius: 32,
+            paddingTop: 28,
+            paddingHorizontal: 20,
+            paddingBottom: 22,
+            gap: 14,
+            ...shadow(0.1),
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <RoundButton name="arrow-left" label="Back" onPress={cancel} />
+            <Heading size={28} style={{ flex: 1, letterSpacing: -0.9 }}>
+              {params.id
+                ? "Edit your item"
+                : wardrobe
+                  ? "Add clothing"
+                  : "Save inspiration"}
+            </Heading>
+            <View
+              accessible
+              accessibilityLabel="Saved privately to your closet"
+              style={{
+                height: 40,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 13,
+                borderRadius: 999,
+                backgroundColor: colors.ink,
+              }}
+            >
+              <Icon name="lock" size={14} color={colors.yellow} />
+              <Text
+                style={{
+                  fontFamily: fonts.bold,
+                  fontSize: 13,
+                  color: colors.white,
+                }}
+              >
+                Private
+              </Text>
+            </View>
+          </View>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 10,
+            }}
+          >
+            <Heading size={30} style={{ letterSpacing: -1 }}>
+              {wardrobe ? "Your clothes." : "Keep the"}
+            </Heading>
+            <StickerBadge size={24} rotate="-5deg">
+              {wardrobe ? "Your style." : "inspiration."}
+            </StickerBadge>
+          </View>
+        </LinearGradient>
+        <View style={{ padding: 20, paddingTop: 18, gap: 18 }}>
           {!session ? (
             <>
               <Heading>Keep your finds close.</Heading>
@@ -256,84 +364,92 @@ export default function LibraryEditor() {
             />
           ) : (
             <>
-              <Heading size={30}>
-                {kind === "wardrobe"
-                  ? "Your clothes. Your style."
-                  : "Keep the inspiration."}
-              </Heading>
-              <Body>
-                {kind === "wardrobe"
-                  ? "Snap or pick one item. We’ll name and sort it for you."
-                  : "Paste a link or add a screenshot. Social posts may not provide a preview; your source link is still saved."}
-              </Body>
-              {query.data?.explore_image && (
-                <Body style={{ fontSize: 13 }}>
-                  The original Explore sample stays with this item. You can add
-                  your own garment photo; removing it restores the sample
-                  illustration.
-                </Body>
-              )}
-              {imageUri && (
-                <Image
-                  source={{ uri: imageUri }}
-                  cachePolicy="none"
-                  contentFit="contain"
-                  style={{
-                    height: 260,
-                    backgroundColor: "#DCD5FF",
-                    borderWidth: 4,
-                    borderColor: colors.white,
-                    borderRadius: 28,
-                  }}
-                />
-              )}
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                {Platform.OS !== "web" && (
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      secondary
-                      icon="camera"
-                      title="Take photo"
-                      disabled={busy}
-                      onPress={() => void choose(true)}
-                    />
-                  </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Button
-                    secondary
-                    icon="image"
-                    title="Gallery"
-                    disabled={busy}
-                    onPress={() => void choose()}
-                  />
-                </View>
-              </View>
-              {!!imageUri && (
-                <Button
-                  secondary
-                  title="Remove photo"
-                  disabled={busy}
+              <AddItemDropZone
+                imageUri={imageUri}
+                reading={reading}
+                disabled={working}
+                helper={
+                  wardrobe
+                    ? "Snap or pick it. We’ll name and sort it."
+                    : "Add a screenshot, or paste the link below."
+                }
+                onCamera={() => void choose(true)}
+                onGallery={() => void choose()}
+              />
+              {!!imageUri && !working && (
+                <Pressable
+                  accessibilityRole="button"
                   onPress={() => {
                     setPhoto(null);
                     setRemovePhoto(true);
+                    setFilled(null);
                   }}
-                />
+                  style={{
+                    alignSelf: "center",
+                    minHeight: 44,
+                    justifyContent: "center",
+                    marginVertical: -10,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bold,
+                      fontSize: 14,
+                      color: colors.text2,
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    Remove photo
+                  </Text>
+                </Pressable>
               )}
-              <Body>Name · optional</Body>
-              <TextInput
-                accessibilityLabel="Item name"
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g. My favorite denim jacket"
-                placeholderTextColor={colors.placeholder}
-                maxLength={100}
-                editable={!busy}
-                style={field}
-              />
-              {kind === "inspiration" && (
-                <>
-                  <Body>Link · optional with a photo</Body>
+              {item?.explore_image && (
+                <Body style={{ fontSize: 13 }}>
+                  The original Explore sample stays with this item. Removing
+                  your photo restores the sample illustration.
+                </Body>
+              )}
+              {wardrobe && <AutoFillChips values={chips} />}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>
+                  Name it{" "}
+                  <Text
+                    style={{ fontFamily: fonts.medium, color: colors.text3 }}
+                  >
+                    (optional)
+                  </Text>
+                </Text>
+                <View style={{ justifyContent: "center" }}>
+                  <TextInput
+                    accessibilityLabel="Item name"
+                    value={name}
+                    onChangeText={setName}
+                    placeholder={
+                      filled?.name || "e.g. My favourite denim jacket"
+                    }
+                    placeholderTextColor={colors.placeholder}
+                    maxLength={100}
+                    editable={!working}
+                    style={[field, { paddingLeft: 46 }]}
+                  />
+                  <View
+                    pointerEvents="none"
+                    style={{ position: "absolute", left: 16 }}
+                  >
+                    <Icon name="tag" size={18} color={colors.text3} />
+                  </View>
+                </View>
+              </View>
+              {!wardrobe && (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>
+                    Link{" "}
+                    <Text
+                      style={{ fontFamily: fonts.medium, color: colors.text3 }}
+                    >
+                      (optional with a photo)
+                    </Text>
+                  </Text>
                   <TextInput
                     accessibilityLabel="Source link"
                     value={url}
@@ -343,10 +459,10 @@ export default function LibraryEditor() {
                     autoCapitalize="none"
                     keyboardType="url"
                     maxLength={2048}
-                    editable={!busy}
+                    editable={!working}
                     style={field}
                   />
-                </>
+                </View>
               )}
               {!!error && (
                 <Body
@@ -359,23 +475,66 @@ export default function LibraryEditor() {
                   {error}
                 </Body>
               )}
-              <Button
-                title={busy ? "Saving…" : "Save privately"}
-                disabled={busy}
-                onPress={() => void save()}
-              />
-              <Button
-                secondary
-                title="Cancel"
-                disabled={busy}
-                onPress={() => {
-                  if (params.shared && Platform.OS !== "web")
-                    clearSharedPayloads();
-                  router.canGoBack()
-                    ? router.back()
-                    : router.replace("/(tabs)/closet");
-                }}
-              />
+              <View style={{ gap: 4, marginTop: 6 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    needsPhoto ? "Add a photo to save" : "Save"
+                  }
+                  accessibilityState={{
+                    disabled: working || needsPhoto,
+                    busy: working,
+                  }}
+                  disabled={working || needsPhoto}
+                  onPress={() => void save()}
+                  style={({ pressed }) => ({
+                    height: 60,
+                    borderRadius: 22,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                    backgroundColor: needsPhoto ? "#9A9590" : colors.ink,
+                    opacity: pressed ? 0.85 : 1,
+                    ...(needsPhoto ? {} : shadow(0.25)),
+                  })}
+                >
+                  {working ? (
+                    <ActivityIndicator color={colors.yellow} />
+                  ) : (
+                    <Icon name="check" size={20} color={colors.yellow} />
+                  )}
+                  <Text
+                    style={{
+                      fontFamily: fonts.bold,
+                      fontSize: 17,
+                      color: colors.white,
+                    }}
+                  >
+                    Save
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={working}
+                  onPress={cancel}
+                  style={{
+                    height: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: fonts.bold,
+                      fontSize: 15,
+                      color: "#4B475A",
+                    }}
+                  >
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
             </>
           )}
         </View>

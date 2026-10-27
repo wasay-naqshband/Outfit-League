@@ -58,12 +58,13 @@ test("closet labeler: keeps bounded fields and a known category", async () => {
   const label = await labelGarment(
     "k",
     uri,
-    answer({ name: "Light blue denim jacket", category: "Coats", color: "light blue", brand: "" }),
+    answer({ name: "Light blue denim jacket", category: "Coats", color: "light blue", style: "Streetwear", brand: "" }),
   );
   assert.deepEqual(label, {
     name: "Light blue denim jacket",
     category: "Other",
     color: "light blue",
+    style: "Streetwear",
     brand: "",
   });
 });
