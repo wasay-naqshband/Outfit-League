@@ -58,7 +58,7 @@ To check it: open the Supabase project, go to **Authentication → Sign In / Pro
 - `git diff --check` — passed; Git emitted only line-ending normalization warnings.
 - `node scripts/audit-web-release.cjs` — passed: 39 built web files, SPA fallback/domain configured, no environment files, and no private server secrets. A subsequent Cloudflare Pages deployment included the compiled battle Functions worker; Cloudflare reported success and `chutni.store` served the updated app.
 - Supabase production Edge Function versions — `tryon` v51, `battles` v18, and `shopping` v9 deployed successfully. No database migrations or records were changed.
-- Codemagic build — commit `b3d4ffc` produced signed iOS build 0.1.0 (132); the IPA artifact is present, and App Store Connect lists build 132 as **Ready to Submit**, attached to the private **Owner auto** internal group (one tester). This is not an App Store release.
+- Codemagic build — commit `8c1720a` produced signed iOS build 0.1.0 (133); the IPA artifact is present, and App Store Connect lists build 133 as **Ready to Submit**, attached to the private **Owner auto** internal group (one tester). This is not an App Store release.
 - Cloudflare Pages production deployment succeeded. The battle image proxy route reached the deployed handler, but the sample battle ID returned `Not found`; a currently published battle is needed to validate an actual preview image.
 - Dependency advisory audit — **not completed**. `pnpm audit --offline` could not reach `registry.npmjs.org` (`ECONNREFUSED`). No dependency changes were made, and no clean bill of health is claimed.
 - Hosted forwarded-IP behavior and external social-platform cache behavior — not verified.
