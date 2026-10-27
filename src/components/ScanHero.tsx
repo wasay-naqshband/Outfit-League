@@ -313,7 +313,7 @@ export function TactileButton({
   onPress,
   style,
 }: {
-  icon: IconName;
+  icon?: IconName;
   title?: string;
   label?: string;
   fill?: string;
@@ -357,7 +357,7 @@ export function TactileButton({
           gap: 10,
         })}
       >
-        <Icon name={icon} size={title ? 22 : 24} />
+        {icon && <Icon name={icon} size={title ? 22 : 24} />}
         {!!title && (
           <Text style={{ fontFamily: fonts.bold, fontSize: 17 }}>{title}</Text>
         )}

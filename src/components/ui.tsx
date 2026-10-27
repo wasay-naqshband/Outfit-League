@@ -69,7 +69,9 @@ export type IconName =
   | "shirt"
   | "heart-filled"
   | "lock"
-  | "tag";
+  | "tag"
+  | "more-horizontal"
+  | "alert-triangle";
 export function Icon({
   name,
   color = c.ink,
@@ -350,8 +352,10 @@ export function AppHeader({
   chips,
   selected,
   onSelect,
+  placeholder,
 }: {
   title: string;
+  placeholder?: string;
   query: string;
   onQuery: (s: string) => void;
   chips: string[];
@@ -373,9 +377,10 @@ export function AppHeader({
           value={query}
           onChangeText={onQuery}
           placeholder={
-            title === "Closet"
+            placeholder ??
+            (title === "Closet"
               ? "Search your saved looks"
-              : "Search fits, styles, brands"
+              : "Search fits, styles, brands")
           }
         />
       </View>

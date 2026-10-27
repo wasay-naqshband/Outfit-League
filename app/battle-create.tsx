@@ -56,11 +56,15 @@ function Step({ n, title }: { n: number; title: string }) {
 }
 
 export default function CreateBattle() {
-  const versus = useLocalSearchParams<{ kind?: string }>().kind === "versus";
+  const params = useLocalSearchParams<{ kind?: string; look?: string }>();
+  const versus = params.kind === "versus";
   const kind = versus ? "versus" : "choose";
   const { session } = useApp();
   const client = useQueryClient();
-  const [looks, setLooks] = useState<string[]>([]);
+  // "Battle it" on a look in Closet arrives with it preselected.
+  const [looks, setLooks] = useState<string[]>(
+    params.look ? [params.look] : [],
+  );
   const [title, setTitle] = useState<string>(PROMPTS[kind][0][1]);
   const [mode, setMode] = useState("Anonymous");
   const [busy, setBusy] = useState(false);

@@ -18,8 +18,7 @@ import {
 } from "../components/ui";
 import { useApp } from "../lib/state";
 import { libraryPage, type LibraryItem } from "../lib/library";
-import { useHistory } from "../lib/queries";
-import { HistoryRow } from "../../app/history";
+import { AiLooksTab, StylistCard } from "../components/AiLooks";
 import { colors, gradients, shadow } from "../theme";
 import { art } from "../data";
 
@@ -39,7 +38,6 @@ export default function Closet() {
     refetchInterval: 240000,
     staleTime: 30000,
   });
-  const history = useHistory();
   const kind = selected === "My Closet" ? "wardrobe" : "inspiration";
   const items = (query.data?.pages.flat() ?? []).filter(
     (item) =>
@@ -55,6 +53,7 @@ export default function Closet() {
         title="Closet"
         query={search}
         onQuery={setSearch}
+        placeholder={selected === "AI Looks" ? "Search your looks" : undefined}
         chips={["Saved", "My Closet", "AI Looks", "Shop"]}
         selected={selected}
         onSelect={(value) =>
@@ -62,33 +61,7 @@ export default function Closet() {
         }
       />
       <View style={{ padding: 18, gap: 18 }}>
-        {session && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="AI Stylist: what should I wear?"
-            onPress={() => router.push("/stylist")}
-            style={{
-              backgroundColor: colors.ink,
-              borderRadius: 28,
-              padding: 20,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 14,
-              ...shadow(0.12),
-            }}
-          >
-            <Icon name="sparkles" size={30} color={colors.yellow} />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Heading size={21} style={{ color: colors.white }}>
-                What should I wear?
-              </Heading>
-              <Body style={{ fontSize: 13, color: colors.white, opacity: 0.8 }}>
-                Your AI stylist picks from your closet and finds your colours.
-              </Body>
-            </View>
-            <Icon name="chevron-right" size={20} color={colors.white} />
-          </Pressable>
-        )}
+        {session && <StylistCard />}
         {!session ? (
           <>
             <LinearGradient
@@ -118,42 +91,7 @@ export default function Closet() {
             </Body>
           </>
         ) : selected === "AI Looks" ? (
-          <>
-            <Heading>Your fits, reimagined.</Heading>
-            <Body>
-              Open a look to compare, save or share. Failed and pending try-ons
-              are in your full history.
-            </Body>
-            {history.isPending ? (
-              <LoadingSkeleton />
-            ) : history.isError ? (
-              <ErrorState
-                message="Your looks couldn’t load."
-                retry={() => void history.refetch()}
-              />
-            ) : (
-              <>
-                {(history.data ?? [])
-                  .filter((job) => job.status === "completed")
-                  .map((job) => (
-                    <HistoryRow key={job.id} job={job} />
-                  ))}
-                {!history.data?.some((job) => job.status === "completed") && (
-                  <EmptyState
-                    title="Your next look starts here."
-                    message="Generate a private try-on and it will appear in this collection."
-                    action="Try something on"
-                    onPress={() => router.push("/(tabs)/try-on")}
-                  />
-                )}
-              </>
-            )}
-            <Button
-              secondary
-              title="Open full try-on history"
-              onPress={() => router.push("/history")}
-            />
-          </>
+          <AiLooksTab search={search} />
         ) : (
           <>
             {kind === "wardrobe" && (
