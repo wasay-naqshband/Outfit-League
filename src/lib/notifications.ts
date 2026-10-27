@@ -110,7 +110,7 @@ export async function scheduleReminders(trialEndsAt: string | null) {
     const later = new Date();
     later.setDate(later.getDate() + 3);
     later.setHours(18, 0, 0, 0);
-    await at(later, "comeback", COMEBACK[0], COMEBACK[1]);
+    await at(later, "comeback", COMEBACK[0]!, COMEBACK[1]!);
     const remind = trialEndsAt
       ? new Date(new Date(trialEndsAt).getTime() - 24 * 3600 * 1000)
       : null;

@@ -12,6 +12,7 @@ import {
 } from "../src/components/ui";
 import { supabase } from "../src/lib/supabase";
 import { takeBattleReturn } from "../src/lib/battles";
+import { parseAuthCallback } from "../src/lib/auth-callback";
 export default function AuthCallback() {
   const params = useLocalSearchParams<{
     code?: string;
@@ -28,24 +29,10 @@ export default function AuthCallback() {
     async function complete() {
       if (!supabase) throw new Error("Not configured");
       const initial = url ?? (await Linking.getInitialURL());
-      const parsed = initial ? new URL(initial) : null;
-      const fragment = new URLSearchParams(parsed?.hash.slice(1) ?? "");
-      const code = params.code ?? parsed?.searchParams.get("code");
-      const recovery =
-        params.recovery === "1" ||
-        parsed?.searchParams.get("recovery") === "1" ||
-        fragment.get("type") === "recovery";
-      const next = params.next ?? parsed?.searchParams.get("next");
-      let authError;
-      if (code)
-        ({ error: authError } =
-          await supabase.auth.exchangeCodeForSession(code));
-      else if (fragment.get("access_token") && fragment.get("refresh_token"))
-        ({ error: authError } = await supabase.auth.setSession({
-          access_token: fragment.get("access_token")!,
-          refresh_token: fragment.get("refresh_token")!,
-        }));
-      else throw new Error("Missing confirmation");
+      const { code, recovery, next } = parseAuthCallback(initial, params);
+      if (!code) throw new Error("Missing confirmation");
+      const { error: authError } =
+        await supabase.auth.exchangeCodeForSession(code);
       if (authError) throw authError;
       return { recovery, next };
     }

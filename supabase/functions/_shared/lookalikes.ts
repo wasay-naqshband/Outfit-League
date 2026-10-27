@@ -1,6 +1,7 @@
 // Cheaper lookalikes: Google Lens finds what looks like the garment, Google
 // Shopping (both via Serper) prices it in the US, and an AI score keeps only
 // close matches. Closest match first, then cheapest.
+import { fetchPublicAsset } from "./link-image.ts";
 export type Lookalike = {
   title: string;
   store: string;
@@ -141,14 +142,15 @@ export async function thumbnail(
   url: string,
   request: typeof fetch = fetch,
 ): Promise<{ mime: string; data: string } | null> {
-  const response = await request(url, {
-    redirect: "follow",
-    signal: AbortSignal.timeout(6000),
-  }).catch(() => null);
-  const mime = response?.headers.get("content-type")?.split(";")[0] ?? "";
-  if (!response?.ok || !/^image\/(jpeg|png|webp)$/.test(mime)) return null;
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length > 1_500_000) return null;
+  let photo: { type: string; data: Uint8Array };
+  try {
+    photo = await fetchPublicAsset(url, 1_500_000, request);
+  } catch {
+    return null;
+  }
+  const mime = photo.type;
+  if (!/^image\/(jpeg|png|webp)$/.test(mime)) return null;
+  const bytes = photo.data;
   let text = "";
   for (let i = 0; i < bytes.length; i += 16384)
     text += String.fromCharCode(...bytes.subarray(i, i + 16384));

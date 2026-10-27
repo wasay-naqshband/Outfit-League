@@ -159,6 +159,21 @@ async function get(
   throw new Error("LINK_FAILED");
 }
 
+// Fetch server-selected image URLs with the same host, DNS, redirect and body
+// limits as user-pasted links. Third-party search results are untrusted too.
+export async function fetchPublicAsset(
+  value: unknown,
+  max: number,
+  request: typeof fetch = fetch,
+  resolve: ResolveDns = resolveDns,
+): Promise<{ type: string; data: Uint8Array }> {
+  const url = publicUrl(value);
+  if (url.protocol !== "https:" || !Number.isSafeInteger(max) || max < 1)
+    throw new Error("LINK_FAILED");
+  const result = await get(url, max, request, resolve);
+  return { type: result.type, data: result.bytes };
+}
+
 const decodeEntities = (text: string) =>
   text
     .replace(/&amp;/g, "&")

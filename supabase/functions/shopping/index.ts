@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { readRequestJson, uuid } from "../_shared/domain.ts";
 import { verifiedRetailerUrl } from "../../../src/lib/shopping-domain.ts";
+import { trustedClientIp } from "../../../src/lib/trusted-client-ip.ts";
 const env = (name: string) => Deno.env.get(name) ?? "";
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -64,22 +65,23 @@ Deno.serve(async (req) => {
     const destination = affiliate
       ? verifiedRetailerUrl(product.affiliate_url, retailer.affiliate_hosts)
       : canonical;
-    const bytes = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(
-        env("TRYON_WORKER_SECRET") +
-          ":shopping:" +
-          (req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown"),
-      ),
-    );
-    const key = Array.from(new Uint8Array(bytes), (x) =>
-      x.toString(16).padStart(2, "0"),
-    ).join("");
-    const limited = await db.rpc("battle_rate", {
-      p_key: "shopping:" + key,
-      p_max: 120,
-    });
-    if (limited.error) throw new Error("RATE_LIMIT");
+    const clientIp = trustedClientIp(req.headers);
+    if (clientIp) {
+      const bytes = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(
+          env("TRYON_WORKER_SECRET") + ":shopping:" + clientIp,
+        ),
+      );
+      const key = Array.from(new Uint8Array(bytes), (x) =>
+        x.toString(16).padStart(2, "0"),
+      ).join("");
+      const limited = await db.rpc("battle_rate", {
+        p_key: "shopping:" + key,
+        p_max: 120,
+      });
+      if (limited.error) throw new Error("RATE_LIMIT");
+    }
     const clicked = await db.from("affiliate_clicks").upsert(
       {
         request_id: body.requestId,

@@ -7,6 +7,7 @@ import {
 } from "../_shared/domain.ts";
 import { objectionable } from "../_shared/profanity.ts";
 import { notify, type Push } from "../_shared/push.ts";
+import { trustedClientIp } from "../../../src/lib/trusted-client-ip.ts";
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 // Tells the battle's owner about activity after replying (never the actor).
 function tellOwner(
@@ -313,14 +314,44 @@ Deno.serve(async (req) => {
             : 0,
         ),
       );
-    // Gateway-provided network header is used only as an additional abuse limit;
-    // no IP address is persisted or returned to callers.
-    const network = await hash(
-      "network:" +
-        (req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-          "unknown"),
-    );
-    await rpc("battle_rate", { p_key: "network:" + network, p_max: 120 });
+    // Only use the edge-supplied CF-Connecting-IP value. X-Forwarded-For can
+    // contain caller-controlled entries; never trust its first item here.
+    const clientIp = trustedClientIp(req.headers);
+    const network = clientIp ? await hash("network:" + clientIp) : null;
+    if (network)
+      await rpc("battle_rate", { p_key: "network:" + network, p_max: 120 });
+    if (body.action === "vote" && network)
+      await rpc("battle_rate", {
+        p_key: `network-vote:${id}:${network}`,
+        p_max: 120,
+      });
+    if (body.action === "share-image") {
+      const side = body.side;
+      if (!SIDES.includes(side as Side)) throw new Error("NOT_FOUND");
+      const row = checked(
+        await db.from("battles").select("*").eq("id", id).single(),
+      );
+      const path = row?.[`${side}_path`];
+      if (row?.status !== "published" || typeof path !== "string")
+        throw new Error("NOT_FOUND");
+      const file = checked(
+        await db.storage.from("battle-images").download(path),
+      );
+      if (!file || file.size > MAX_IMAGE_BYTES) throw new Error("NOT_FOUND");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      validateJpeg(bytes);
+      return new Response(bytes, {
+        headers: {
+          "Access-Control-Allow-Origin": allowed.includes(origin)
+            ? origin
+            : "null",
+          "Cache-Control": "public, max-age=300, s-maxage=300",
+          "Content-Type": "image/jpeg",
+          "X-Content-Type-Options": "nosniff",
+          Vary: "Origin",
+        },
+      });
+    }
     if (body.action === "share-preview") {
       const row = checked(
         await db
@@ -330,25 +361,14 @@ Deno.serve(async (req) => {
           .single(),
       );
       if (!row || row.status !== "published") throw new Error("NOT_FOUND");
-      const paths = [row.a_path, row.b_path, row.c_path, row.d_path].filter(
-        (path): path is string => typeof path === "string",
-      );
-      const images = await Promise.all(
-        paths.map(async (path) => {
-          const signed = checked(
-            await db.storage
-              .from("battle-images")
-              .createSignedUrl(path, 60 * 60 * 24 * 30),
-          );
-          if (!signed) throw new Error("NOT_FOUND");
-          return signed.signedUrl;
-        }),
+      const sides = SIDES.filter(
+        (side) => typeof row[`${side}_path`] === "string",
       );
       return reply({
         title: row.title,
         kind: row.kind,
         mode: row.voting_mode,
-        images,
+        sides,
       });
     }
     if (body.action === "delete") {
@@ -576,7 +596,7 @@ Deno.serve(async (req) => {
         throw new Error("INVALID_REQUEST");
       await rpc("report_battle", {
         p_id: id,
-        p_key: await hash("report:" + network),
+        p_key: await hash("report:" + (network ?? `token:${body.token}`)),
         p_reason: body.reason,
       });
       return reply({ reported: true });
