@@ -1,98 +1,184 @@
 import React from "react";
-import { Linking, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
-  Body,
   Button,
   ErrorState,
   FlatHeader,
-  Heading,
+  Icon,
   Page,
 } from "../src/components/ui";
 import { useApp } from "../src/lib/state";
 import { useWallet } from "../src/lib/queries";
+import { colors, fonts, shadow } from "../src/theme";
+
 export default function Credits() {
   const { session } = useApp(),
-    wallet = useWallet();
+    wallet = useWallet(),
+    w = wallet.data,
+    pro = !!w?.subscription_active;
   return (
     <Page>
-      <FlatHeader title="More possibilities" pill="Credits" />
-      <View style={{ padding: 20, gap: 16 }}>
-        <Heading size={34}>A little style goes a long way.</Heading>
-        {!session ? (
-          <>
-            <Body>
-              New accounts receive three complimentary successful try-ons.
-              Browsing and viewing sample results use no credits.
-            </Body>
-            <Button title="Sign in" onPress={() => router.push("/auth")} />
-          </>
-        ) : wallet.isError ? (
+      <FlatHeader title="Credits" pill={false} />
+      <View style={{ paddingHorizontal: 20, gap: 16 }}>
+        {wallet.isError ? (
           <ErrorState
             message="We couldn’t load your credit balance."
-            retry={() => {
-              void wallet.refetch();
-            }}
+            retry={() => void wallet.refetch()}
           />
-        ) : wallet.data ? (
-          <>
-            <Heading size={34}>{wallet.data.available} available</Heading>
-            <Body>
-              {wallet.data.subscription_active
-                ? `${wallet.data.subscription_tryons} Pro try-ons and ${wallet.data.subscription_spins} included 360° views left this month. Unused monthly allowances expire.`
-                : "Free and purchased credits stay available until you use them."}
-            </Body>
-            {!!wallet.data.reserved && (
-              <Body>
-                {wallet.data.reserved} credit(s) reserved for work in progress.
-              </Body>
-            )}
-          </>
         ) : (
-          <Body>Loading your balance…</Body>
+          <View
+            style={{
+              backgroundColor: colors.ink,
+              borderRadius: 32,
+              padding: 24,
+              gap: 2,
+              ...shadow(0.2),
+            }}
+          >
+            <Text style={label}>
+              {session ? "CREDITS" : "FREE WHEN YOU SIGN UP"}
+            </Text>
+            <Text
+              style={{
+                fontFamily: fonts.heading,
+                fontSize: 80,
+                lineHeight: 88,
+                letterSpacing: -3,
+                color: colors.yellow,
+              }}
+            >
+              {!session ? 3 : (w?.available ?? "–")}
+            </Text>
+            <Text style={sub}>
+              1 credit = 1 try-on
+              {!!w?.reserved && ` · ${w.reserved} in progress`}
+            </Text>
+            {pro && (
+              <View
+                style={{
+                  marginTop: 18,
+                  paddingTop: 16,
+                  borderTopWidth: 1,
+                  borderTopColor: "rgba(255,255,255,0.14)",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: fonts.bold,
+                    fontSize: 12,
+                    color: colors.ink,
+                    backgroundColor: colors.yellow,
+                    borderRadius: 8,
+                    overflow: "hidden",
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                  }}
+                >
+                  PRO
+                </Text>
+                <Text style={[sub, { flex: 1 }]}>
+                  {w!.subscription_tryons} try-ons · {w!.subscription_spins} 360°
+                  views this month
+                </Text>
+              </View>
+            )}
+          </View>
         )}
-        <Body>
-          One successful generation uses one credit. Failed or timed-out
-          generations return the reserved credit. The server controls your
-          balance.
-        </Body>
-        <Button
-          title={
-            wallet.data?.subscription_active
-              ? "Manage your Pro options"
-              : "See plans and try-on packs"
-          }
-          onPress={() => router.push("/paywall")}
-        />
-        <Body>
-          {wallet.data?.subscription_active
-            ? "Manage or cancel subscriptions in your Apple Account settings."
-            : "App Store offers appear when they’re available on your iPhone. Closing this page keeps browsing free."}
-        </Body>
-        {wallet.data?.subscription_active && (
-          <Button
-            secondary
-            title="Open Apple subscriptions"
-            onPress={() =>
-              void Linking.openURL(
-                "https://apps.apple.com/account/subscriptions",
-              )
-            }
-          />
+
+        {!session ? (
+          <Button title="Sign in" onPress={() => router.push("/auth")} />
+        ) : (
+          <>
+            <Button
+              icon="sparkles"
+              title={pro ? "Change plan" : "Get more try-ons"}
+              onPress={() => router.push("/paywall")}
+            />
+            <View
+              style={{
+                backgroundColor: colors.white,
+                borderRadius: 24,
+                paddingHorizontal: 18,
+                ...shadow(0.05),
+              }}
+            >
+              <Row
+                icon="clock"
+                title="Credit activity"
+                onPress={() => router.push("/credit-history")}
+              />
+              {pro && (
+                <Row
+                  icon="settings"
+                  title="Manage subscription"
+                  divider
+                  onPress={() =>
+                    void Linking.openURL(
+                      "https://apps.apple.com/account/subscriptions",
+                    )
+                  }
+                />
+              )}
+            </View>
+            <Text
+              style={{
+                fontFamily: fonts.body,
+                fontSize: 13,
+                color: colors.text3,
+                textAlign: "center",
+              }}
+            >
+              A failed try-on gives the credit back.
+            </Text>
+          </>
         )}
-        {session && (
-          <Button
-            secondary
-            title="View credit activity"
-            onPress={() => router.push("/credit-history")}
-          />
-        )}
-        <Button
-          secondary
-          title="About credit packs"
-          onPress={() => router.push("/credit-packs")}
-        />
       </View>
     </Page>
+  );
+}
+
+const label = {
+  fontFamily: fonts.bold,
+  fontSize: 12,
+  letterSpacing: 1.2,
+  color: colors.yellow,
+};
+const sub = { fontFamily: fonts.medium, fontSize: 15, color: colors.inactive };
+
+function Row({
+  icon,
+  title,
+  divider,
+  onPress,
+}: {
+  icon: "clock" | "settings";
+  title: string;
+  divider?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 58,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        opacity: pressed ? 0.6 : 1,
+        borderTopWidth: divider ? 1 : 0,
+        borderTopColor: colors.inactive,
+      })}
+    >
+      <Icon name={icon} size={20} />
+      <Text style={{ flex: 1, fontFamily: fonts.bold, fontSize: 16 }}>
+        {title}
+      </Text>
+      <Icon name="chevron-right" size={20} color={colors.text3} />
+    </Pressable>
   );
 }

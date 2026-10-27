@@ -401,7 +401,8 @@ export function FlatHeader({
   children,
 }: {
   title: string;
-  pill?: string;
+  // false hides the credit pill (on the Credits screen itself).
+  pill?: string | false;
   children?: React.ReactNode;
 }) {
   const compact = useWindowDimensions().width <= 360;
@@ -434,7 +435,7 @@ export function FlatHeader({
             <View style={[s.pill, { height: 36, paddingHorizontal: 12 }]}>
               <Text style={s.pillText}>{pill}</Text>
             </View>
-          ) : (
+          ) : pill === false ? null : (
             <CreditPill compact={compact} />
           )}
         </View>
