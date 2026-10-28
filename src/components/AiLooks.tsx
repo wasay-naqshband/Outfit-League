@@ -42,7 +42,7 @@ const hidden = {
   importantForAccessibility: "no-hide-descendants" as const,
 };
 
-function useTwinkle() {
+export function useTwinkle() {
   const reduce = useReduceMotion();
   const v = useRef(new Animated.Value(1)).current;
   useFocusEffect(

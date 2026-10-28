@@ -213,6 +213,7 @@ export async function styleOutfit(
   styles: string[],
   closet: ClosetItem[] | null,
   department: "men" | "women" | null = null,
+  anchor: string | null = null,
   request: typeof fetch = fetch,
 ) {
   const listing = (closet ?? [])
@@ -231,8 +232,16 @@ export async function styleOutfit(
             ? `The wearer shops ${department === "men" ? "menswear" : "womenswear"}. Every piece, including ones from their closet, must be ${department === "men" ? "men's" : "women's"} clothing; never pick pieces from the other department.\n`
             : "") +
           (styles.length ? `Their style: ${styles.join(", ")}\n` : "") +
-          (closet
-            ? `Their closet (id | name | category | colour | brand):\n${listing}\nBuild the outfit FROM this closet: every piece they own that can work must be in it, each with its closetId exactly as listed and its name exactly as listed. Never invent or restyle a piece they already own. Only if the closet truly lacks a needed part (top, bottoms or shoes) add one plain neutral basic with no closetId, and keep new pieces to the minimum. Even with a single closet item, it must be the centrepiece.\n`
+          (closet && anchor && closet.length === 1
+            ? `Their piece (id | name | category | colour | brand):
+${listing}
+Use it with that closetId and add new pieces to complete the outfit.
+`
+            : closet
+              ? `Their closet (id | name | category | colour | brand):\n${listing}\nBuild the outfit FROM this closet: every piece they own that can work must be in it, each with its closetId exactly as listed and its name exactly as listed. Never invent or restyle a piece they already own. Only if the closet truly lacks a needed part (top, bottoms or shoes) add one plain neutral basic with no closetId, and keep new pieces to the minimum. Even with a single closet item, it must be the centrepiece.\n`
+              : "") +
+          (anchor
+            ? `Build the whole outfit around their closet piece ${anchor}: it must be in the outfit with that closetId.\n`
             : "") +
           "Style one complete, great-looking outfit for this request: 3 to 6 pieces (top, optional layer, bottoms, shoes, and accessories only if they add something). " +
           "Describe each piece concretely, colour, fabric and fit, e.g. 'black matte cropped puffer jacket'. " +

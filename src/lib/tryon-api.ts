@@ -159,6 +159,7 @@ export const pickOutfit = (
   styles: string[],
   closet = false,
   person?: string,
+  anchor?: string,
 ) =>
   callTryOn<{ outfit: OutfitPick | null; emptyCloset?: boolean }>({
     action: "outfit",
@@ -166,6 +167,7 @@ export const pickOutfit = (
     styles,
     closet,
     person,
+    anchor,
   });
 // Shop the look: real products for one piece, and the store's own page.
 export const shopPiece = (query: string) =>

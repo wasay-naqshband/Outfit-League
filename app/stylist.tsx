@@ -65,7 +65,12 @@ const MESSAGES = [
 export default function Stylist() {
   const { session } = useApp();
   const client = useQueryClient();
-  const params = useLocalSearchParams<{ closet?: string; occasion?: string }>();
+  const params = useLocalSearchParams<{
+    closet?: string;
+    occasion?: string;
+    item?: string;
+    name?: string;
+  }>();
   const styles = useOnboarding().answers.styles.map(styleLabel);
   const saved = useSavedPhoto();
   const wallet = useWallet();
@@ -89,7 +94,13 @@ export default function Stylist() {
     setEmptyCloset(false);
     try {
       const person = await uploadPhoto(saved.data, "person");
-      const pick = await pickOutfit(request, styles, closet, person);
+      const pick = await pickOutfit(
+        request,
+        styles,
+        closet,
+        person,
+        params.item,
+      );
       if (!pick.outfit) return setEmptyCloset(true);
       analytics.track("stylist_styled", { from: closet ? "closet" : "ideas" });
       const { pieces, title } = pick.outfit;
@@ -185,7 +196,27 @@ export default function Stylist() {
         </View>
       </LinearGradient>
       <View style={{ padding: 20, gap: 18 }}>
-        <StylistExampleCard />
+        {params.item && params.name ? (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              backgroundColor: colors.white,
+              borderRadius: 18,
+              padding: 14,
+              ...shadow(0.06),
+            }}
+          >
+            <Icon name="hanger" size={20} />
+            <Text style={{ flex: 1, fontFamily: fonts.body, fontSize: 15 }}>
+              Building a fit around your{" "}
+              <Text style={{ fontFamily: fonts.bold }}>{params.name}</Text>
+            </Text>
+          </View>
+        ) : (
+          <StylistExampleCard />
+        )}
         <Heading size={19}>Where are you off to?</Heading>
         <View
           accessibilityRole="radiogroup"

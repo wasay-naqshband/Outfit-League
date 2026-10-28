@@ -1088,7 +1088,9 @@ Deno.serve(async (req) => {
         p_max: (await hasPro(owner)) ? 30 : 5,
       });
       let closet: ClosetItem[] | null = null;
-      if (body.closet === true) {
+      // "What goes with this?" on a closet item: the outfit is built around it.
+      const anchor = uuid(body.anchor) ? (body.anchor as string) : null;
+      if (body.closet === true || anchor) {
         closet = required(
           await db
             .from("library_items")
@@ -1098,6 +1100,8 @@ Deno.serve(async (req) => {
             .order("created_at", { ascending: false })
             .limit(150),
         );
+        if (body.closet !== true)
+          closet = closet.filter((item) => item.id === anchor);
         if (!closet.length) return reply({ outfit: null, emptyCloset: true });
       }
       return reply({
@@ -1119,6 +1123,7 @@ Deno.serve(async (req) => {
               return null;
             }
           })(),
+          anchor,
         ),
       });
     }
