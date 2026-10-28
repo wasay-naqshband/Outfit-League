@@ -973,7 +973,8 @@ Deno.serve(async (req) => {
     if (body.action === "shop-feed") {
       const serper = env("SERPER_API_KEY");
       if (!serper) throw new Error("LOOKALIKES_UNAVAILABLE");
-      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 60 });
+      // A saved-looks page loads one search per piece.
+      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 200 });
       const styles = (Array.isArray(body.styles) ? body.styles : [])
         .filter((x): x is string => typeof x === "string" && x.length <= 24)
         .slice(0, 3);
@@ -996,7 +997,8 @@ Deno.serve(async (req) => {
     if (body.action === "shop-piece" || body.action === "piece-link") {
       const serper = env("SERPER_API_KEY");
       if (!serper) throw new Error("LOOKALIKES_UNAVAILABLE");
-      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 60 });
+      // A saved-looks page loads one search per piece.
+      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 200 });
       if (body.action === "piece-link") {
         const item = body.item as Record<string, unknown> | null;
         const url = typeof item?.url === "string" ? item.url : "";
@@ -1015,14 +1017,17 @@ Deno.serve(async (req) => {
       const query = typeof body.query === "string" ? body.query.trim() : "";
       if (!query || query.length > 100) throw new Error("INVALID_REQUEST");
       return reply({
-        // Saved pieces and stylist pieces shop their own department.
-        items: await directOptions(
-          serper,
-          await shopping(
-            serper,
-            forDepartment(query, await shopperDepartment(owner)),
-          ).catch(() => [] as Lookalike[]),
-        ),
+        // Saved pieces and stylist pieces shop their own department; results
+        // (links already resolved) are shared across shoppers.
+        items: await (async () => {
+          const q = forDepartment(query, await shopperDepartment(owner));
+          return await cachedRail("piece:" + q, async () =>
+            directOptions(
+              serper,
+              await shopping(serper, q).catch(() => [] as Lookalike[]),
+            ),
+          ).catch(() => [] as Lookalike[]);
+        })(),
       });
     }
     if (body.action === "link") {

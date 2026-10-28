@@ -35,10 +35,12 @@ export function PieceOptions({
   piece,
   items: given,
   heading,
+  bare,
 }: {
   piece: OutfitPiece;
   items?: Lookalike[];
   heading?: string;
+  bare?: boolean;
 }) {
   const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
@@ -69,21 +71,23 @@ export function PieceOptions({
   }
   return (
     <View style={{ gap: 8 }}>
-      <View style={{ gap: 2 }}>
-        <Text
-          style={{
-            fontFamily: fonts.bold,
-            fontSize: 11,
-            letterSpacing: 1,
-            color: colors.text3,
-          }}
-        >
-          {(heading ?? PART_LABEL[piece.part]).toUpperCase()}
-        </Text>
-        <Text style={{ fontFamily: fonts.medium, fontSize: 15 }}>
-          {piece.name}
-        </Text>
-      </View>
+      {!bare && (
+        <View style={{ gap: 2 }}>
+          <Text
+            style={{
+              fontFamily: fonts.bold,
+              fontSize: 11,
+              letterSpacing: 1,
+              color: colors.text3,
+            }}
+          >
+            {(heading ?? PART_LABEL[piece.part]).toUpperCase()}
+          </Text>
+          <Text style={{ fontFamily: fonts.medium, fontSize: 15 }}>
+            {piece.name}
+          </Text>
+        </View>
+      )}
       {pending ? (
         <View
           style={{
