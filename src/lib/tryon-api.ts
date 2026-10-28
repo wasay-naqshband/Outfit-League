@@ -158,12 +158,14 @@ export const pickOutfit = (
   occasion: string,
   styles: string[],
   closet = false,
+  department?: "men" | "women",
 ) =>
   callTryOn<{ outfit: OutfitPick | null; emptyCloset?: boolean }>({
     action: "outfit",
     occasion,
     styles,
     closet,
+    department,
   });
 // Shop the look: real products for one piece, and the store's own page.
 export const shopPiece = (query: string) =>

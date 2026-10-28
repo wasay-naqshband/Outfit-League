@@ -71,16 +71,20 @@ export default function Stylist() {
   const wallet = useWallet();
   const config = useTryOnConfig();
   const [occasion, setOccasion] = useState<string>(OCCASIONS[0].prompt);
+  const onboarding = useOnboarding();
+  const department = onboarding.answers.department;
   const [details, setDetails] = useState("");
   const [emptyCloset, setEmptyCloset] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [needsDepartment, setNeedsDepartment] = useState(false);
   const startedAt = React.useRef(0);
   const typed = details.trim() ? `${occasion}. ${details.trim()}` : occasion;
 
-  async function styleMe(closet: boolean, request = typed) {
+  async function styleMe(closet: boolean, request = typed, restyleRun = false) {
     if (busy || saved.isPending || wallet.isPending) return;
     if (!saved.data) return router.push("/my-photo");
+    if (!department && !restyleRun) return setNeedsDepartment(true);
     if ((wallet.data?.available ?? 0) < 1) return outOfCredits();
     if (!(await agreedOnce(config.data?.provider ?? "the AI provider"))) return;
     startedAt.current = Date.now();
@@ -88,7 +92,7 @@ export default function Stylist() {
     setError("");
     setEmptyCloset(false);
     try {
-      const pick = await pickOutfit(request, styles, closet);
+      const pick = await pickOutfit(request, styles, closet, department);
       if (!pick.outfit) return setEmptyCloset(true);
       analytics.track("stylist_styled", { from: closet ? "closet" : "ideas" });
       const person = await uploadPhoto(saved.data, "person");
@@ -123,7 +127,7 @@ export default function Stylist() {
   const restyle = params.closet === "1" && !!params.occasion;
   const ready = !!session && !saved.isPending && !wallet.isPending;
   useEffect(() => {
-    if (restyle && ready) void styleMe(true, params.occasion);
+    if (restyle && ready) void styleMe(true, params.occasion, true);
     // Once, when the screen opens with the restyle request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restyle, ready]);
@@ -186,6 +190,57 @@ export default function Stylist() {
       </LinearGradient>
       <View style={{ padding: 20, gap: 18 }}>
         <StylistExampleCard />
+        <Heading size={19}>Who are we styling?</Heading>
+        <View
+          accessibilityRole="radiogroup"
+          style={{ flexDirection: "row", gap: 8 }}
+        >
+          {(
+            [
+              ["women", "Womenswear"],
+              ["men", "Menswear"],
+            ] as const
+          ).map(([id, label]) => {
+            const selected = department === id;
+            return (
+              <Pressable
+                key={id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                onPress={() => {
+                  onboarding.update({ department: id });
+                  setNeedsDepartment(false);
+                }}
+                style={{
+                  flex: 1,
+                  minHeight: 52,
+                  borderRadius: 18,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: selected ? colors.ink : colors.white,
+                  borderWidth: needsDepartment && !selected ? 2 : 0,
+                  borderColor: "#D63B24",
+                  ...shadow(selected ? 0.18 : 0.06),
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: selected ? fonts.bold : fonts.medium,
+                    fontSize: 15,
+                    color: selected ? colors.white : colors.ink,
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {needsDepartment && (
+          <Body style={{ color: "#A3321F", fontSize: 13, marginTop: -8 }}>
+            Pick one so your stylist shops the right section.
+          </Body>
+        )}
         <Heading size={19}>Where are you off to?</Heading>
         <View
           accessibilityRole="radiogroup"

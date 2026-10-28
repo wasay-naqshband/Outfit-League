@@ -186,6 +186,25 @@ export function cleanStyled(value: unknown) {
     : null;
 }
 
+// Shop queries always name the department, whatever the model wrote.
+export function forDepartment(
+  query: string,
+  department: "men" | "women" | null,
+) {
+  if (!department) return query;
+  const other =
+    department === "men"
+      ? /\b(women'?s?|womens|ladies|girls?)\b/gi
+      : /\b(men'?s?|mens|boys?)\b/gi;
+  const own =
+    department === "men"
+      ? /\b(men'?s?|mens)\b/i
+      : /\b(women'?s?|womens|ladies)\b/i;
+  const clean = query.replace(other, "").replace(/\s+/g, " ").trim();
+  return own.test(clean)
+    ? clean
+    : (department === "men" ? "men's " : "women's ") + clean;
+}
 // AI Stylist: a complete outfit for the occasion, each piece with a shopping
 // query (for Shop the look). With a closet, pieces they own carry its id.
 export async function styleOutfit(
@@ -193,6 +212,7 @@ export async function styleOutfit(
   occasion: string,
   styles: string[],
   closet: ClosetItem[] | null,
+  department: "men" | "women" | null = null,
   request: typeof fetch = fetch,
 ) {
   const listing = (closet ?? [])
@@ -207,6 +227,9 @@ export async function styleOutfit(
       {
         text:
           `Request: ${occasion}\n` +
+          (department
+            ? `The wearer shops ${department === "men" ? "menswear" : "womenswear"}. Every piece, including ones from their closet, must be ${department === "men" ? "men's" : "women's"} clothing; never pick pieces from the other department.\n`
+            : "") +
           (styles.length ? `Their style: ${styles.join(", ")}\n` : "") +
           (closet
             ? `Their closet (id | name | category | colour | brand):\n${listing}\nBuild the outfit FROM this closet: every piece they own that can work must be in it, each with its closetId exactly as listed and its name exactly as listed. Never invent or restyle a piece they already own. Only if the closet truly lacks a needed part (top, bottoms or shoes) add one plain neutral basic with no closetId, and keep new pieces to the minimum. Even with a single closet item, it must be the centrepiece.\n`
@@ -247,6 +270,7 @@ export async function styleOutfit(
   const pieces = cleanPieces(out.pieces, (id) => owned.has(id)).map((p) => ({
     ...p,
     name: (p.closetId && names.get(p.closetId)) || p.name,
+    query: forDepartment(p.query, department),
   }));
   if (!pieces.length) throw new Error("STYLIST_FAILED");
   if (closet && !pieces.some((p) => p.closetId))

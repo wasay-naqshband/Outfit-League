@@ -225,9 +225,9 @@ async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
         fetch,
         job.outfit
           ? outfitPrompt(job.outfit) +
-            (own.length
-              ? ` The extra photos show clothes they own (${own.map((x) => x.name).join(", ")}): the person must wear exactly those garments as shown, same colour, print and cut.`
-              : "")
+              (own.length
+                ? ` The extra photos show clothes they own (${own.map((x) => x.name).join(", ")}): the person must wear exactly those garments as shown, same colour, print and cut.`
+                : "")
           : undefined,
       ),
     );
@@ -1094,7 +1094,15 @@ Deno.serve(async (req) => {
         if (!closet.length) return reply({ outfit: null, emptyCloset: true });
       }
       return reply({
-        outfit: await styleOutfit(key, occasion, styles, closet),
+        outfit: await styleOutfit(
+          key,
+          occasion,
+          styles,
+          closet,
+          body.department === "men" || body.department === "women"
+            ? body.department
+            : null,
+        ),
       });
     }
     if (body.action === "delete") {
