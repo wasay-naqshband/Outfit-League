@@ -54,8 +54,9 @@ export async function shopping(
   key: string,
   query: string,
   request: typeof fetch = fetch,
+  num = 20,
 ): Promise<Lookalike[]> {
-  const data = await serper(key, "shopping", { q: query, num: 20 }, request);
+  const data = await serper(key, "shopping", { q: query, num }, request);
   return ((data?.shopping ?? []) as Record<string, unknown>[])
     .map((item) => ({
       title: String(item.title ?? "")
@@ -196,7 +197,7 @@ export function pieceOptions(items: Lookalike[], count = 3): Lookalike[] {
       (item) =>
         !seen.has(storeKey(item.store)) && !!seen.add(storeKey(item.store)),
     )
-    .slice(0, 8);
+    .slice(0, Math.max(8, count));
   if (!best) return [];
   const cheapest = rest.slice().sort(cheaper)[0];
   return [
@@ -222,7 +223,7 @@ export async function directOptions(
 ): Promise<Lookalike[]> {
   // Up to 8 stores, 3 lookups at a time, stopping once `count` resolve: a
   // burst of lookups gets throttled, and every throttled one was lost.
-  const candidates = pieceOptions(items, 8);
+  const candidates = pieceOptions(items, count + 5);
   const found: Lookalike[] = [];
   for (let i = 0; i < candidates.length && found.length < count; i += 3) {
     const batch = await Promise.all(
@@ -235,6 +236,18 @@ export async function directOptions(
     found.push(...batch.filter((item) => !isGoogle(item.url)));
   }
   return pieceOptions(found, count);
+}
+// Products clearly made for the other department ("Women's …" for a man).
+export function forShopper(
+  items: Lookalike[],
+  department: "men" | "women" | null,
+) {
+  if (!department) return items;
+  const other =
+    department === "men"
+      ? /\b(women'?s?|womens|woman|ladies|girls?)\b/i
+      : /\b(men'?s?|mens|man|boys?)\b/i;
+  return items.filter((item) => !other.test(item.title));
 }
 // Shop tab rails: shared by everyone in a department and style, so results
 // are cached per query (and the shopper's department per account).
@@ -263,7 +276,7 @@ export function feedRails(
     {
       id: "style",
       title: "Picked for your style",
-      query: q(style + " outfit pieces"),
+      query: q(style + " hoodie"),
     },
     { id: "outerwear", title: "Jackets and layers", query: q("jacket") },
     { id: "tops", title: "Everyday tops", query: q(style + " t-shirt") },

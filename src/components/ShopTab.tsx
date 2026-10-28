@@ -10,7 +10,7 @@ import {
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
-import { Body, ErrorState, Heading, Icon, type IconName } from "./ui";
+import { Body, Button, Heading, Icon, type IconName } from "./ui";
 import { ProductCard } from "./Lookalikes";
 import { PieceOptions } from "./ShopTheLook";
 import { TactileButton } from "./ScanHero";
@@ -111,6 +111,79 @@ function RailSkeleton() {
   );
 }
 
+// Same ids and order as the server's feedRails; each loads on its own.
+const RAILS = [
+  { id: "style", title: "Picked for your style" },
+  { id: "outerwear", title: "Jackets and layers" },
+  { id: "tops", title: "Everyday tops" },
+  { id: "bottoms", title: "Jeans and trousers" },
+  { id: "shoes", title: "Sneakers and shoes" },
+  { id: "extras", title: "Bags and accessories" },
+];
+
+function Rail({
+  id,
+  title,
+  owner,
+  styles,
+  opening,
+  onOpen,
+}: {
+  id: string;
+  title: string;
+  owner?: string;
+  styles: string[];
+  opening: string;
+  onOpen: (item: Lookalike) => void;
+}) {
+  const rail = useQuery({
+    queryKey: ["shop-rail", owner, id, styles.join(",")],
+    queryFn: async () => (await shopFeed(styles, id)).rails[0]?.items ?? [],
+    staleTime: 1000 * 60 * 60,
+    retry: 1,
+  });
+  if (rail.isPending) return <RailSkeleton />;
+  if (rail.isError)
+    return (
+      <View style={{ gap: 10 }}>
+        <Heading size={20}>{title}</Heading>
+        <Button
+          secondary
+          icon="refresh-cw"
+          title="Couldn’t load · Retry"
+          onPress={() => void rail.refetch()}
+        />
+      </View>
+    );
+  if (!rail.data.length) return null;
+  return (
+    <View style={{ gap: 10 }}>
+      <Heading size={20}>{title}</Heading>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ marginHorizontal: -18 }}
+        contentContainerStyle={{
+          gap: 12,
+          paddingHorizontal: 18,
+          paddingVertical: 4,
+        }}
+      >
+        {rail.data.map((item) => (
+          <ProductCard
+            key={item.url}
+            item={item}
+            busy={opening === item.url}
+            disabled={!!opening}
+            label="Shop"
+            onBuy={() => onOpen(item)}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 // Closet → Shop: their saved looks and Scan first, then live store picks for
 // their department and style. Every card opens the store's own product page.
 export function ShopTab({ search }: { search: string }) {
@@ -121,12 +194,6 @@ export function ShopTab({ search }: { search: string }) {
     return () => clearTimeout(timer);
   }, [search]);
   const styles = useOnboarding().answers.styles.map(styleLabel);
-  const feed = useQuery({
-    queryKey: ["shop-feed", session?.user.id, styles.join(",")],
-    queryFn: () => shopFeed(styles),
-    staleTime: 1000 * 60 * 60,
-    retry: 1,
-  });
   const [opening, setOpening] = useState("");
   const [error, setError] = useState("");
   async function open(rail: string, item: Lookalike) {
@@ -208,44 +275,17 @@ export function ShopTab({ search }: { search: string }) {
           </View>
         </Entry>
       </View>
-      {feed.isPending ? (
-        <>
-          <RailSkeleton />
-          <RailSkeleton />
-        </>
-      ) : feed.isError || !feed.data.rails.length ? (
-        <ErrorState
-          message="Store picks couldn’t load."
-          retry={() => void feed.refetch()}
+      {RAILS.map((rail) => (
+        <Rail
+          key={rail.id}
+          id={rail.id}
+          title={rail.title}
+          owner={session?.user.id}
+          styles={styles}
+          opening={opening}
+          onOpen={(item) => void open(rail.id, item)}
         />
-      ) : (
-        feed.data.rails.map((rail) => (
-          <View key={rail.id} style={{ gap: 10 }}>
-            <Heading size={20}>{rail.title}</Heading>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginHorizontal: -18 }}
-              contentContainerStyle={{
-                gap: 12,
-                paddingHorizontal: 18,
-                paddingVertical: 4,
-              }}
-            >
-              {rail.items.map((item) => (
-                <ProductCard
-                  key={item.url}
-                  item={item}
-                  busy={opening === item.url}
-                  disabled={!!opening}
-                  label="Shop"
-                  onBuy={() => void open(rail.id, item)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        ))
-      )}
+      ))}
       {!!error && (
         <Body style={{ fontSize: 13, color: "#A3321F" }}>{error}</Body>
       )}

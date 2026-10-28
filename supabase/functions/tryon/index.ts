@@ -25,6 +25,7 @@ import {
   directOptions,
   cachedRail,
   feedRails,
+  forShopper,
   rank,
   shopping,
   storeLink,
@@ -230,7 +231,7 @@ async function shopperDepartment(owner: string) {
   } catch {
     found = null;
   }
-  departments.set(owner, found);
+  if (found) departments.set(owner, found);
   return found;
 }
 // Older app builds send only the text: their saved piece's colour + name.
@@ -1030,18 +1031,29 @@ Deno.serve(async (req) => {
         .filter((x): x is string => typeof x === "string" && x.length <= 24)
         .slice(0, 3);
       const department = await shopperDepartment(owner);
+      // New builds load one rail at a time (15 products); older builds load
+      // every rail in one call, so they keep 8.
+      const one = typeof body.rail === "string" ? body.rail : null;
+      const count = one ? 15 : 8;
       const rails = await Promise.all(
-        feedRails(department, styles).map(async (rail) => ({
-          ...rail,
-          items: await cachedRail(rail.query, async () =>
-            directOptions(
-              serper,
-              await shopping(serper, rail.query).catch(() => [] as Lookalike[]),
-              fetch,
-              8,
-            ),
-          ).catch(() => [] as Lookalike[]),
-        })),
+        feedRails(department, styles)
+          .filter((rail) => !one || rail.id === one)
+          .map(async (rail) => ({
+            ...rail,
+            items: await cachedRail(rail.query + "|" + count, async () =>
+              directOptions(
+                serper,
+                forShopper(
+                  await shopping(serper, rail.query, fetch, 40).catch(
+                    () => [] as Lookalike[],
+                  ),
+                  department,
+                ),
+                fetch,
+                count,
+              ),
+            ).catch(() => [] as Lookalike[]),
+          })),
       );
       return reply({ rails: rails.filter((rail) => rail.items.length) });
     }
@@ -1084,7 +1096,10 @@ Deno.serve(async (req) => {
           const find = async (text: string) =>
             directOptions(
               serper,
-              await shopping(serper, text).catch(() => [] as Lookalike[]),
+              forShopper(
+                await shopping(serper, text).catch(() => [] as Lookalike[]),
+                department,
+              ),
             );
           // A very specific name can miss; retry with its last few words
           // ("washed black super baggy jeans" → "super baggy jeans").
