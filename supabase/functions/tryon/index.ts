@@ -34,6 +34,7 @@ import {
   garmentQuery,
   scoreLookalikes,
   styleOutfit,
+  wearerDepartment,
   cleanStyled,
   rateFit,
   checkPhoto,
@@ -1099,9 +1100,19 @@ Deno.serve(async (req) => {
           occasion,
           styles,
           closet,
-          body.department === "men" || body.department === "women"
-            ? body.department
-            : null,
+          // Older app builds send no photo; then the outfit is unisex.
+          await (async () => {
+            try {
+              return uuid(body.person)
+                ? await wearerDepartment(
+                    key,
+                    await readInput(body.person, owner),
+                  )
+                : null;
+            } catch {
+              return null;
+            }
+          })(),
         ),
       });
     }

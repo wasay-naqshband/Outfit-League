@@ -12,8 +12,6 @@ export type Answers = {
   painPoints: string[];
   yearlyWaste?: string;
   styles: string[];
-  // Whose clothes the AI Stylist picks; asked once on the stylist screen.
-  department?: "men" | "women";
   tryOnPhotoAdded?: boolean;
 };
 const KEY = "outfit-league-onboarding-v1";

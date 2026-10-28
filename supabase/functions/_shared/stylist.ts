@@ -428,6 +428,33 @@ export const CLOSET_CATEGORIES = [
   "Accessories",
   "Other",
 ] as const;
+// Which clothing section suits the person in their try-on photo; null when unsure.
+export async function wearerDepartment(
+  key: string,
+  image: string,
+  request: typeof fetch = fetch,
+) {
+  const out = await ask(
+    key,
+    [
+      photo(image),
+      {
+        text: 'Which clothing section does the person in this photo shop, based on how they present: menswear or womenswear? Answer "unsure" only if it truly cannot be told.',
+      },
+    ],
+    {
+      type: "OBJECT",
+      properties: {
+        department: { type: "STRING", enum: ["men", "women", "unsure"] },
+      },
+      required: ["department"],
+    },
+    request,
+  );
+  return out.department === "men" || out.department === "women"
+    ? out.department
+    : null;
+}
 // Closet photo → short name, category, colour and a visible brand, so people
 // only snap the item and the stylist still knows what it is.
 export async function labelGarment(
