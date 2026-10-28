@@ -162,7 +162,7 @@ export function StylistCard() {
 }
 
 // Bottom sheet over a dimmed screen; tapping the backdrop closes it.
-function Sheet({
+export function Sheet({
   visible,
   onClose,
   children,
