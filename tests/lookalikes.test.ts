@@ -176,3 +176,34 @@ test("shop the look: closest first, then cheapest, then next closest, one per st
   assert.deepEqual(got, ["Nordstrom", "Walmart", "H&M"]);
   assert.deepEqual(pieceOptions([]), []);
 });
+
+test("shop the look: every option opens the store's own page", async () => {
+  const { directOptions } =
+    await import("../supabase/functions/_shared/lookalikes.ts");
+  const g = (store: string, price: number): Lookalike => ({
+    title: store + " pants",
+    store,
+    price,
+    url: "https://www.google.com/search?ibp=oshop&q=" + store,
+    image: "https://x.com/i.jpg",
+  });
+  const pages: Record<string, string> = {
+    "Zara USA": "https://www.zara.com/us/en/pants-p1.html",
+    Walmart: "https://www.walmart.com/ip/pants/123",
+    "H&M": "https://www2.hm.com/en_us/productpage.1.html",
+  };
+  const request = (async (_: string, init: RequestInit) => {
+    const q = JSON.parse(String(init.body)).q as string;
+    const store = Object.keys(pages).find((s) => q.endsWith(s));
+    return Response.json({ organic: store ? [{ link: pages[store] }] : [] });
+  }) as unknown as typeof fetch;
+  const got = await directOptions(
+    "k",
+    [g("Zara USA", 99), g("Tiny Shop", 10), g("Walmart", 65), g("H&M", 50)],
+    request,
+  );
+  assert.deepEqual(
+    got.map((i) => i.url),
+    [pages["Zara USA"], pages["H&M"], pages.Walmart],
+  ); // "Tiny Shop" had no store page, so it is dropped
+});

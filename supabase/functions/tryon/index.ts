@@ -22,7 +22,7 @@ import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 import { linkImage } from "../_shared/link-image.ts";
 import {
   lens,
-  pieceOptions,
+  directOptions,
   rank,
   shopping,
   storeLink,
@@ -935,7 +935,12 @@ Deno.serve(async (req) => {
       return reply({
         scan,
         // Visual matches first, so "Best match" is the closest look.
-        items: pieceOptions([...visual.items.slice(0, 3), ...priced]),
+        items: serper
+          ? await directOptions(serper, [
+              ...visual.items.slice(0, 3),
+              ...priced,
+            ])
+          : [],
       });
     }
     if (body.action === "shop-piece" || body.action === "piece-link") {
@@ -960,7 +965,8 @@ Deno.serve(async (req) => {
       const query = typeof body.query === "string" ? body.query.trim() : "";
       if (!query || query.length > 100) throw new Error("INVALID_REQUEST");
       return reply({
-        items: pieceOptions(
+        items: await directOptions(
+          serper,
           await shopping(serper, query).catch(() => [] as Lookalike[]),
         ),
       });

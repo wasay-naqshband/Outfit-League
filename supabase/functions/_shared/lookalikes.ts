@@ -189,7 +189,7 @@ export function rank(items: Lookalike[]): Lookalike[] {
 
 // Shop the look, from Google's relevance order (one per store, top 8): the
 // closest result, the cheapest of the rest, then the next closest.
-export function pieceOptions(items: Lookalike[]): Lookalike[] {
+export function pieceOptions(items: Lookalike[], count = 3): Lookalike[] {
   const seen = new Set<string>();
   const [best, ...rest] = items
     .filter(
@@ -203,9 +203,31 @@ export function pieceOptions(items: Lookalike[]): Lookalike[] {
     best,
     ...rest.filter((item) => item === cheapest),
     ...rest.filter((item) => item !== cheapest),
-  ].slice(0, 3);
+  ].slice(0, count);
 }
 
+// "zarausa" (Zara USA) is zara.com; "walmart" is walmart.com.
+const sameStore = (domain: string, name: string) =>
+  domain === name ||
+  (domain.length >= 3 && (name.startsWith(domain) || domain.startsWith(name)));
+export const isGoogle = (url: string) =>
+  /(^|\.)google\./.test(new URL(url).hostname);
+// Shop the look: up to 3 options that open the store's own product page.
+// Links are resolved now, in parallel, so tapping Shop opens instantly.
+export async function directOptions(
+  key: string,
+  items: Lookalike[],
+  request: typeof fetch = fetch,
+): Promise<Lookalike[]> {
+  const pool = await Promise.all(
+    pieceOptions(items, 6).map((item) =>
+      storeLink(key, item, request)
+        .then((url) => ({ ...item, url }))
+        .catch(() => item),
+    ),
+  );
+  return pieceOptions(pool.filter((item) => !isGoogle(item.url)));
+}
 // Google Shopping links open Google, not the store. Find the store's own
 // product page with one web search (done when "Buy" is tapped, then saved).
 export async function storeLink(
@@ -213,7 +235,7 @@ export async function storeLink(
   item: Lookalike,
   request: typeof fetch = fetch,
 ): Promise<string> {
-  if (!/(^|\.)google\./.test(new URL(item.url).hostname)) return item.url;
+  if (!isGoogle(item.url)) return item.url;
   const data = await serper(
     key,
     "search",
@@ -238,7 +260,7 @@ export async function storeLink(
     links.find(
       (link) =>
         name.length > 1 &&
-        domain(link).replace(/[^a-z0-9]/g, "") === name &&
+        sameStore(domain(link).replace(/[^a-z0-9]/g, ""), name) &&
         !listing.test(new URL(link).pathname),
     ) ?? item.url
   );

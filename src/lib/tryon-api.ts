@@ -170,8 +170,11 @@ export const pickOutfit = (
 // Shop the look: real products for one piece, and the store's own page.
 export const shopPiece = (query: string) =>
   callTryOn<{ items: Lookalike[] }>({ action: "shop-piece", query });
-export const pieceLink = (item: Lookalike) =>
-  callTryOn<{ url: string }>({ action: "piece-link", item });
+// Store pages open straight away; only Google Shopping links need resolving.
+export const pieceLink = async (item: Lookalike) =>
+  !/(^|\.)google\./.test(new URL(item.url).hostname)
+    ? { url: item.url }
+    : callTryOn<{ url: string }>({ action: "piece-link", item });
 export type Scan = {
   name: string;
   category: string;
