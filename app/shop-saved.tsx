@@ -120,6 +120,7 @@ export default function ShopSaved() {
                 </View>
                 <PieceOptions
                   bare
+                  item={item.photo_path ? item.id : undefined}
                   piece={{
                     part: "accessory",
                     name: item.name,

@@ -36,17 +36,20 @@ export function PieceOptions({
   items: given,
   heading,
   bare,
+  item,
 }: {
   piece: OutfitPiece;
   items?: Lookalike[];
   heading?: string;
   bare?: boolean;
+  // A closet piece's id: the server shops it by its photo.
+  item?: string;
 }) {
   const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
   const shop = useQuery({
-    queryKey: ["shop-piece", piece.query],
-    queryFn: () => shopPiece(piece.query),
+    queryKey: ["shop-piece", piece.query, item],
+    queryFn: () => shopPiece(piece.query, item),
     staleTime: Infinity,
     retry: 1,
     enabled: !given,

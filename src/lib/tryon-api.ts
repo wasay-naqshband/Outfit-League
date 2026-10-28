@@ -176,13 +176,14 @@ export const shopFeed = (styles: string[]) =>
 // Shop the look: real products for one piece, and the store's own page.
 let running = 0;
 const waiting: (() => void)[] = [];
-export async function shopPiece(query: string) {
+export async function shopPiece(query: string, item?: string) {
   if (running >= 2) await new Promise<void>((go) => waiting.push(go));
   running++;
   try {
     return await callTryOn<{ items: Lookalike[] }>({
       action: "shop-piece",
       query,
+      item,
     });
   } finally {
     running--;

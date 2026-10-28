@@ -233,6 +233,57 @@ async function shopperDepartment(owner: string) {
   departments.set(owner, found);
   return found;
 }
+// Older app builds send only the text: their saved piece's colour + name.
+async function closetMatch(owner: string, query: string) {
+  const items = checked(
+    await db
+      .from("library_items")
+      .select("id,name,color")
+      .eq("owner_id", owner)
+      .not("photo_path", "is", null)
+      .limit(200),
+  ) as { id: string; name: string; color: string }[];
+  const text = (item: { name: string; color: string }) =>
+    item.color && !item.name.toLowerCase().includes(item.color.toLowerCase())
+      ? item.color + " " + item.name
+      : item.name;
+  return items.find((item) => text(item) === query)?.id ?? null;
+}
+// Shopping query for a closet piece's photo, remembered per piece (per
+// isolate); null when it has no photo or the photo can't be read.
+const photoQueries = new Map<string, string | null>();
+async function photoQuery(owner: string, id: string | null) {
+  if (!id) return null;
+  if (photoQueries.has(id)) return photoQueries.get(id)!;
+  let query: string | null = null;
+  try {
+    const item = checked(
+      await db
+        .from("library_items")
+        .select("photo_path")
+        .eq("id", id)
+        .eq("owner_id", owner)
+        .maybeSingle(),
+    ) as { photo_path: string | null } | null;
+    if (item?.photo_path) {
+      const file = await db.storage
+        .from("library-private")
+        .download(item.photo_path);
+      if (!file.error && file.data && file.data.size <= MAX_IMAGE_BYTES) {
+        const bytes = new Uint8Array(await file.data.arrayBuffer());
+        validateJpeg(bytes);
+        query = await garmentQuery(
+          env("GEMINI_API_KEY"),
+          "data:image/jpeg;base64," + toBase64(bytes),
+        );
+      }
+    }
+  } catch {
+    query = null;
+  }
+  photoQueries.set(id, query);
+  return query;
+}
 // Image editors answer in one long call, so it runs after the request returns;
 // the app keeps polling "status". A dead worker is refunded when the job expires.
 async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
@@ -1021,7 +1072,15 @@ Deno.serve(async (req) => {
         // (links already resolved) are shared across shoppers.
         items: await (async () => {
           const department = await shopperDepartment(owner);
-          const q = forDepartment(query, department);
+          // A saved piece with a photo is searched by what the photo shows;
+          // its name may be the shopper's own ("Raglan" for a plaid shirt).
+          const seen = await photoQuery(
+            owner,
+            uuid(body.item)
+              ? (body.item as string)
+              : await closetMatch(owner, query),
+          );
+          const q = forDepartment(seen ?? query, department);
           const find = async (text: string) =>
             directOptions(
               serper,
@@ -1029,7 +1088,7 @@ Deno.serve(async (req) => {
             );
           // A very specific name can miss; retry with its last few words
           // ("washed black super baggy jeans" → "super baggy jeans").
-          const words = q.split(" ");
+          const words = q.split(" ").filter((w) => !/^(and|with|&)$/i.test(w));
           return await cachedRail("piece:" + q, async () => {
             const items = await find(q);
             return items.length || words.length <= 3
