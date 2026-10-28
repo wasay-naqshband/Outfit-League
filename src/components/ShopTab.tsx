@@ -35,6 +35,7 @@ function Entry({
       <LinearGradient
         colors={tint}
         style={{
+          flex: 1,
           minHeight: 150,
           borderRadius: 24,
           borderWidth: 3,
