@@ -85,6 +85,7 @@ type Job = {
   person_asset_id: string;
   garment_asset_id: string | null;
   outfit: string | null;
+  styled: { pieces?: { closetId: string | null; name: string }[] } | null;
   extra_garments: string[];
   garment_parts: string[];
   result_asset_id: string | null;
@@ -174,6 +175,36 @@ async function storeResult(job: Job, bytes: Uint8Array) {
   );
   await rpc("finish_tryon", { p_job: job.id, p_result: job.id });
 }
+// Photos of the closet pieces a styled outfit uses (at most 3), so the editor
+// dresses the person in those exact garments instead of inventing look-alikes.
+async function closetPhotos(job: Job) {
+  const owned = (job.styled?.pieces ?? [])
+    .filter((p) => p.closetId)
+    .slice(0, 3);
+  const found = await Promise.all(
+    owned.map(async (p) => {
+      const item = checked(
+        await db
+          .from("library_items")
+          .select("photo_path")
+          .eq("id", p.closetId!)
+          .eq("owner_id", job.owner_id)
+          .eq("kind", "wardrobe")
+          .maybeSingle(),
+      ) as { photo_path: string | null } | null;
+      if (!item?.photo_path) return null;
+      const file = await db.storage
+        .from("library-private")
+        .download(item.photo_path);
+      if (file.error || !file.data || file.data.size > MAX_IMAGE_BYTES)
+        return null;
+      const bytes = new Uint8Array(await file.data.arrayBuffer());
+      validateJpeg(bytes);
+      return { name: p.name, uri: "data:image/jpeg;base64," + toBase64(bytes) };
+    }),
+  );
+  return found.filter((x): x is { name: string; uri: string } => !!x);
+}
 // Image editors answer in one long call, so it runs after the request returns;
 // the app keeps polling "status". A dead worker is refunded when the job expires.
 async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
@@ -184,13 +215,20 @@ async function runEdit(job: Job, name: "Gemini" | "OpenAI") {
         .map((id) => readInput(id, job.owner_id)),
     );
     const [person, ...garments] = inputs;
+    const own = job.outfit ? await closetPhotos(job).catch(() => []) : [];
+    garments.push(...own.map((x) => x.uri));
     const bytes = await normalizeResult(
       await editors[name](
         providerKey(name),
         person!,
         garments,
         fetch,
-        job.outfit ? outfitPrompt(job.outfit) : undefined,
+        job.outfit
+          ? outfitPrompt(job.outfit) +
+            (own.length
+              ? ` The extra photos show clothes they own (${own.map((x) => x.name).join(", ")}): the person must wear exactly those garments as shown, same colour, print and cut.`
+              : "")
+          : undefined,
       ),
     );
     validateJpeg(bytes);
@@ -756,13 +794,16 @@ Deno.serve(async (req) => {
         p_parts: parts,
         p_outfit: outfit,
       });
-      if (reserved.created && outfit)
+      if (reserved.created && outfit) {
+        // The job object submitted below predates this update, so carry it over.
+        reserved.job.styled = cleanStyled(body.styled);
         checked(
           await db
             .from("try_on_jobs")
-            .update({ styled: cleanStyled(body.styled) })
+            .update({ styled: reserved.job.styled })
             .eq("id", reserved.job.id),
         );
+      }
       if (reserved.created) await submitJob(reserved.job);
       return reply(await resultView(await ownedJob(reserved.job.id, owner)));
     }
