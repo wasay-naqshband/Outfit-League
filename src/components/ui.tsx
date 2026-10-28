@@ -975,7 +975,7 @@ const s = StyleSheet.create({
   },
   chip: {
     height: 44,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     borderRadius: 22,
     backgroundColor: c.chip,
     alignItems: "center",

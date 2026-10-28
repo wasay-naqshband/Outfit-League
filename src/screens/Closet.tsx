@@ -96,7 +96,12 @@ export default function Closet() {
             </Body>
           </>
         ) : selected === "Shop" ? (
-          <ShopTab search={search} />
+          <ShopTab
+            search={search}
+            thumbs={(query.data?.pages.flat() ?? [])
+              .flatMap((item) => (item.photoUrl ? [item.photoUrl] : []))
+              .slice(0, 2)}
+          />
         ) : selected === "AI Looks" ? (
           <AiLooksTab search={search} />
         ) : (
