@@ -23,6 +23,8 @@ import { linkImage } from "../_shared/link-image.ts";
 import {
   lens,
   directOptions,
+  cachedRail,
+  feedRails,
   rank,
   shopping,
   storeLink,
@@ -205,6 +207,30 @@ async function closetPhotos(job: Job) {
     }),
   );
   return found.filter((x): x is { name: string; uri: string } => !!x);
+}
+// Menswear or womenswear from the saved try-on photo, remembered per account
+// (per isolate); null when there's no photo or it can't be told.
+const departments = new Map<string, "men" | "women" | null>();
+async function shopperDepartment(owner: string) {
+  if (departments.has(owner)) return departments.get(owner)!;
+  let found: "men" | "women" | null = null;
+  try {
+    const saved = await db.storage
+      .from("saved-photos")
+      .download(owner + "/person.jpg");
+    if (!saved.error && saved.data && saved.data.size <= MAX_IMAGE_BYTES) {
+      const bytes = new Uint8Array(await saved.data.arrayBuffer());
+      validateJpeg(bytes);
+      found = await wearerDepartment(
+        env("GEMINI_API_KEY"),
+        "data:image/jpeg;base64," + toBase64(bytes),
+      );
+    }
+  } catch {
+    found = null;
+  }
+  departments.set(owner, found);
+  return found;
 }
 // Image editors answer in one long call, so it runs after the request returns;
 // the app keeps polling "status". A dead worker is refunded when the job expires.
@@ -942,6 +968,29 @@ Deno.serve(async (req) => {
             ])
           : [],
       });
+    }
+    if (body.action === "shop-feed") {
+      const serper = env("SERPER_API_KEY");
+      if (!serper) throw new Error("LOOKALIKES_UNAVAILABLE");
+      await rpc("battle_rate", { p_key: "shop:" + owner, p_max: 60 });
+      const styles = (Array.isArray(body.styles) ? body.styles : [])
+        .filter((x): x is string => typeof x === "string" && x.length <= 24)
+        .slice(0, 3);
+      const department = await shopperDepartment(owner);
+      const rails = await Promise.all(
+        feedRails(department, styles).map(async (rail) => ({
+          ...rail,
+          items: await cachedRail(rail.query, async () =>
+            directOptions(
+              serper,
+              await shopping(serper, rail.query).catch(() => [] as Lookalike[]),
+              fetch,
+              8,
+            ),
+          ).catch(() => [] as Lookalike[]),
+        })),
+      );
+      return reply({ rails: rails.filter((rail) => rail.items.length) });
     }
     if (body.action === "shop-piece" || body.action === "piece-link") {
       const serper = env("SERPER_API_KEY");

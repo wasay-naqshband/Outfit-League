@@ -218,15 +218,59 @@ export async function directOptions(
   key: string,
   items: Lookalike[],
   request: typeof fetch = fetch,
+  count = 3,
 ): Promise<Lookalike[]> {
   const pool = await Promise.all(
-    pieceOptions(items, 6).map((item) =>
+    pieceOptions(items, count + 3).map((item) =>
       storeLink(key, item, request)
         .then((url) => ({ ...item, url }))
         .catch(() => item),
     ),
   );
-  return pieceOptions(pool.filter((item) => !isGoogle(item.url)));
+  return pieceOptions(
+    pool.filter((item) => !isGoogle(item.url)),
+    count,
+  );
+}
+// Shop tab rails: shared by everyone in a department and style, so results
+// are cached per query (and the shopper's department per account).
+// ponytail: per-isolate memory cache; a table if cold starts cost too much.
+const FEED_TTL = 6 * 60 * 60 * 1000;
+const feedCache = new Map<string, { at: number; items: Lookalike[] }>();
+export async function cachedRail(
+  query: string,
+  load: () => Promise<Lookalike[]>,
+) {
+  const hit = feedCache.get(query);
+  if (hit && Date.now() - hit.at < FEED_TTL) return hit.items;
+  const items = await load();
+  if (items.length) feedCache.set(query, { at: Date.now(), items });
+  return items;
+}
+export function feedRails(
+  department: "men" | "women" | null,
+  styles: string[],
+) {
+  const d =
+    department === "men" ? "men's" : department === "women" ? "women's" : "";
+  const q = (text: string) => (d + " " + text).trim();
+  const style = (styles[0] ?? "everyday").toLowerCase();
+  return [
+    {
+      id: "style",
+      title: "Picked for your style",
+      query: q(style + " outfit pieces"),
+    },
+    { id: "outerwear", title: "Jackets and layers", query: q("jacket") },
+    { id: "tops", title: "Everyday tops", query: q(style + " t-shirt") },
+    { id: "bottoms", title: "Jeans and trousers", query: q("wide leg jeans") },
+    { id: "shoes", title: "Sneakers and shoes", query: q("sneakers") },
+    {
+      id: "extras",
+      title: "Bags and accessories",
+      query: q("accessories bag"),
+    },
+  ];
 }
 // Google Shopping links open Google, not the store. Find the store's own
 // product page with one web search (done when "Buy" is tapped, then saved).

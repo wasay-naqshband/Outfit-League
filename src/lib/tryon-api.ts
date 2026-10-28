@@ -169,6 +169,10 @@ export const pickOutfit = (
     person,
     anchor,
   });
+// Shop tab: rails of real products for their department and style.
+export type ShopRail = { id: string; title: string; items: Lookalike[] };
+export const shopFeed = (styles: string[]) =>
+  callTryOn<{ rails: ShopRail[] }>({ action: "shop-feed", styles });
 // Shop the look: real products for one piece, and the store's own page.
 export const shopPiece = (query: string) =>
   callTryOn<{ items: Lookalike[] }>({ action: "shop-piece", query });

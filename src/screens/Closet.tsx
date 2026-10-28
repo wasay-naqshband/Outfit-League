@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import { useApp } from "../lib/state";
 import { libraryPage, type LibraryItem } from "../lib/library";
+import { ShopTab } from "../components/ShopTab";
 import { AiLooksTab, StylistCard } from "../components/AiLooks";
 import { colors, gradients, shadow } from "../theme";
 import { art } from "../data";
@@ -53,15 +54,19 @@ export default function Closet() {
         title="Closet"
         query={search}
         onQuery={setSearch}
-        placeholder={selected === "AI Looks" ? "Search your looks" : undefined}
+        placeholder={
+          selected === "AI Looks"
+            ? "Search your looks"
+            : selected === "Shop"
+              ? "Search stores"
+              : undefined
+        }
         chips={["Saved", "My Closet", "AI Looks", "Shop"]}
         selected={selected}
-        onSelect={(value) =>
-          value === "Shop" ? router.push("/shop-saved") : setSelected(value)
-        }
+        onSelect={setSelected}
       />
       <View style={{ padding: 18, gap: 18 }}>
-        {session && <StylistCard />}
+        {session && selected !== "Shop" && <StylistCard />}
         {!session ? (
           <>
             <LinearGradient
@@ -90,6 +95,8 @@ export default function Closet() {
               your own saves.
             </Body>
           </>
+        ) : selected === "Shop" ? (
+          <ShopTab search={search} />
         ) : selected === "AI Looks" ? (
           <AiLooksTab search={search} />
         ) : (

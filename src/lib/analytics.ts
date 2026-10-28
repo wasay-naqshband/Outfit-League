@@ -14,6 +14,9 @@ export type AnalyticsEvents = {
   shop_look_clicked: {
     part: "top" | "layer" | "bottoms" | "shoes" | "accessory";
   };
+  shop_feed_clicked: {
+    rail: "style" | "outerwear" | "tops" | "bottoms" | "shoes" | "extras";
+  };
   lookalikes_requested: { from: "result" };
   lookalike_clicked: { badge: "closest" | "cheapest" | "other" };
   spin_started: { plan: "pro" };
@@ -54,6 +57,9 @@ const allowed: {
   stylist_styled: { from: ["ideas", "closet"] },
   shop_look_clicked: {
     part: ["top", "layer", "bottoms", "shoes", "accessory"],
+  },
+  shop_feed_clicked: {
+    rail: ["style", "outerwear", "tops", "bottoms", "shoes", "extras"],
   },
   lookalikes_requested: { from: ["result"] },
   lookalike_clicked: { badge: ["closest", "cheapest", "other"] },
