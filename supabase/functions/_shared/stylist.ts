@@ -209,7 +209,7 @@ export async function styleOutfit(
           `Request: ${occasion}\n` +
           (styles.length ? `Their style: ${styles.join(", ")}\n` : "") +
           (closet
-            ? `Their closet (id | name | category | colour | brand):\n${listing}\nUse pieces from their closet wherever they fit, giving that piece's closetId exactly as listed; only add new pieces for gaps.\n`
+            ? `Their closet (id | name | category | colour | brand):\n${listing}\nBuild the outfit FROM this closet: every piece they own that can work must be in it, each with its closetId exactly as listed and its name exactly as listed. Never invent or restyle a piece they already own. Only if the closet truly lacks a needed part (top, bottoms or shoes) add one plain neutral basic with no closetId, and keep new pieces to the minimum. Even with a single closet item, it must be the centrepiece.\n`
             : "") +
           "Style one complete, great-looking outfit for this request: 3 to 6 pieces (top, optional layer, bottoms, shoes, and accessories only if they add something). " +
           "Describe each piece concretely, colour, fabric and fit, e.g. 'black matte cropped puffer jacket'. " +
@@ -242,8 +242,15 @@ export async function styleOutfit(
     request,
   );
   const owned = new Set((closet ?? []).map((item) => item.id));
-  const pieces = cleanPieces(out.pieces, (id) => owned.has(id));
+  const names = new Map((closet ?? []).map((item) => [item.id, item.name]));
+  // Pieces they own keep their real closet name, whatever the model called them.
+  const pieces = cleanPieces(out.pieces, (id) => owned.has(id)).map((p) => ({
+    ...p,
+    name: (p.closetId && names.get(p.closetId)) || p.name,
+  }));
   if (!pieces.length) throw new Error("STYLIST_FAILED");
+  if (closet && !pieces.some((p) => p.closetId))
+    throw new Error("STYLIST_FAILED");
   return {
     title: line(out.title, 80),
     why: line(out.why, 300),
