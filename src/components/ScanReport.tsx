@@ -119,7 +119,8 @@ export function ScanReport({
           colors={["#FFF7A8", colors.yellow, "#FFDD1F"]}
           locations={[0, 0.5, 1]}
           style={{
-            height: missingPoint.length ? 652 : 606,
+            // Tags and title flow below the photo, so wrapping never overlaps.
+            paddingBottom: 30,
             borderBottomLeftRadius: 36,
             borderBottomRightRadius: 36,
             ...shadow(0.1),
@@ -243,10 +244,8 @@ export function ScanReport({
           {!!missingPoint.length && (
             <View
               style={{
-                position: "absolute",
-                top: 458,
-                left: 20,
-                right: 20,
+                marginTop: 470,
+                marginHorizontal: 20,
                 flexDirection: "row",
                 justifyContent: "center",
                 flexWrap: "wrap",
@@ -260,10 +259,8 @@ export function ScanReport({
           )}
           <View
             style={{
-              position: "absolute",
-              top: missingPoint.length ? 500 : 478,
-              left: 20,
-              right: 20,
+              marginTop: missingPoint.length ? 14 : 478,
+              marginHorizontal: 20,
               alignItems: "center",
               gap: 10,
             }}
@@ -751,7 +748,7 @@ function Chip({
 
 function Tag({ children }: { children: string }) {
   return (
-    <StickerBadge size={18} rotate="-3deg">
+    <StickerBadge size={15} rotate="-3deg">
       {children}
     </StickerBadge>
   );
