@@ -37,6 +37,7 @@ import {
   scoreLookalikes,
   styleOutfit,
   wearerDepartment,
+  forDepartment,
   cleanStyled,
   rateFit,
   checkPhoto,
@@ -1014,9 +1015,13 @@ Deno.serve(async (req) => {
       const query = typeof body.query === "string" ? body.query.trim() : "";
       if (!query || query.length > 100) throw new Error("INVALID_REQUEST");
       return reply({
+        // Saved pieces and stylist pieces shop their own department.
         items: await directOptions(
           serper,
-          await shopping(serper, query).catch(() => [] as Lookalike[]),
+          await shopping(
+            serper,
+            forDepartment(query, await shopperDepartment(owner)),
+          ).catch(() => [] as Lookalike[]),
         ),
       });
     }
