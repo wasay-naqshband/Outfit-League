@@ -26,10 +26,8 @@ import { TactileButton, useReduceMotion } from "../../src/components/ScanHero";
 import {
   cleanSourceUrl,
   deleteLibraryItem,
-  libraryGarment,
   libraryItem,
 } from "../../src/lib/library";
-import { useTryOnDraft } from "../../src/lib/tryon-draft";
 import { useApp } from "../../src/lib/state";
 import { colors, fonts, gradients, shadow } from "../../src/theme";
 import { art } from "../../src/data";
@@ -130,8 +128,7 @@ export default function LibraryDetail() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [broken, setBroken] = useState(false);
-  const client = useQueryClient(),
-    draft = useTryOnDraft();
+  const client = useQueryClient();
   const reduce = useReduceMotion();
   const twinkle = useTwinkle();
   const float = useFloat(reduce);
@@ -147,24 +144,19 @@ export default function LibraryDetail() {
     }).start();
   }, [tags.length, reduce, pop]);
 
-  async function act(action: "delete" | "try") {
+  async function remove() {
     if (busy || !item) return;
     setBusy(true);
     setError("");
     try {
-      if (action === "delete") {
-        await deleteLibraryItem(item.id);
-        client.removeQueries({
-          queryKey: ["library-item", session?.user.id, item.id],
-        });
-        await client.invalidateQueries({ queryKey: ["library"] });
-        await client.invalidateQueries({ queryKey: ["explore-save"] });
-        setConfirm(false);
-        router.replace("/(tabs)/closet");
-      } else {
-        draft.setGarment(await libraryGarment(item));
-        router.push("/(tabs)/try-on");
-      }
+      await deleteLibraryItem(item.id);
+      client.removeQueries({
+        queryKey: ["library-item", session?.user.id, item.id],
+      });
+      await client.invalidateQueries({ queryKey: ["library"] });
+      await client.invalidateQueries({ queryKey: ["explore-save"] });
+      setConfirm(false);
+      router.replace("/(tabs)/closet");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Please try again.");
     } finally {
@@ -203,9 +195,6 @@ export default function LibraryDetail() {
         <Icon name="hanger" size={40} color={colors.text3} />
       </View>
     );
-  const canTry =
-    !!item &&
-    (!!item.photo_path || !!item.explore_photo_url || !!item.explore_garment);
 
   return (
     <Page>
@@ -667,18 +656,24 @@ export default function LibraryDetail() {
                   </View>
                 </Pressable>
               ) : (
-                // Inspiration isn't owned yet: trying it on and shopping stay.
+                // Inspiration isn't owned yet: buy the exact piece when its
+                // source is known, otherwise shop similar.
                 <View style={{ gap: 12, marginTop: 24 }}>
-                  {canTry && (
+                  {item.source_url && (
                     <Button
-                      icon="sparkles"
-                      title={busy ? "Please wait…" : "Try this on"}
-                      disabled={busy}
-                      onPress={() => void act("try")}
+                      icon="shopping-bag"
+                      title="Buy this exact piece"
+                      onPress={() => {
+                        const url = cleanSourceUrl(item.source_url!);
+                        if (url)
+                          void Linking.openURL(url).catch(() =>
+                            setError("This link couldn’t open."),
+                          );
+                      }}
                     />
                   )}
                   <Button
-                    secondary
+                    secondary={!!item.source_url}
                     icon="shopping-bag"
                     title="Shop similar styles"
                     disabled={busy}
@@ -689,19 +684,6 @@ export default function LibraryDetail() {
                       })
                     }
                   />
-                  {item.source_url && (
-                    <Button
-                      secondary
-                      title="Open original source"
-                      onPress={() => {
-                        const url = cleanSourceUrl(item.source_url!);
-                        if (url)
-                          void Linking.openURL(url).catch(() =>
-                            setError("This link couldn’t open."),
-                          );
-                      }}
-                    />
-                  )}
                 </View>
               )}
               {!!error && !confirm && (
@@ -866,7 +848,7 @@ export default function LibraryDetail() {
                     accessibilityLabel="Delete item"
                     accessibilityState={{ disabled: busy, busy }}
                     disabled={busy}
-                    onPress={() => void act("delete")}
+                    onPress={() => void remove()}
                     style={({ pressed }) => ({
                       height: 58,
                       marginTop: pressed ? 4 : 0,
