@@ -1,7 +1,7 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Body,
@@ -107,6 +107,14 @@ export default function ScanTab() {
       setBusy(false);
     }
   }
+  // Shop tab → "Take photo" / "Gallery": start that pick once, then clear it.
+  const { pick } = useLocalSearchParams<{ pick?: "camera" | "gallery" }>();
+  useEffect(() => {
+    if (!pick) return;
+    router.setParams({ pick: undefined });
+    void snap(pick === "camera" && Platform.OS !== "web");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pick]);
   async function save() {
     if (!photo || !result || saved || saving) return;
     setSaving(true);

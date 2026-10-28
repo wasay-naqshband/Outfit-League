@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { router } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { useQuery } from "@tanstack/react-query";
 import { Body, ErrorState, Heading, Icon, type IconName } from "./ui";
 import { ProductCard } from "./Lookalikes";
 import { PieceOptions } from "./ShopTheLook";
+import { TactileButton } from "./ScanHero";
 import { analytics } from "../lib/analytics";
 import { useApp } from "../lib/state";
 import { styleLabel, useOnboarding } from "../lib/onboarding";
@@ -18,54 +26,58 @@ function Entry({
   body,
   tint,
   onPress,
+  children,
 }: {
   icon: IconName;
   title: string;
   body: string;
   tint: readonly [string, string, ...string[]];
-  onPress: () => void;
+  onPress?: () => void;
+  children?: React.ReactNode;
 }) {
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${body}`}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={onPress ? `${title}. ${body}` : undefined}
+      disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.85 : 1 })}
+      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}
     >
       <LinearGradient
         colors={tint}
         style={{
-          flex: 1,
-          minHeight: 150,
           borderRadius: 24,
           borderWidth: 3,
           borderColor: colors.white,
           padding: 16,
-          gap: 8,
-          justifyContent: "space-between",
+          gap: 14,
           ...shadow(0.08),
         }}
       >
-        <View
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: colors.ink,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon name={icon} size={20} color={colors.yellow} />
-        </View>
-        <View style={{ gap: 2 }}>
-          <Heading size={18}>{title}</Heading>
-          <Text
-            style={{ fontFamily: fonts.body, fontSize: 13, color: "#3B3647" }}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: colors.ink,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            {body}
-          </Text>
+            <Icon name={icon} size={20} color={colors.yellow} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Heading size={18}>{title}</Heading>
+            <Text
+              style={{ fontFamily: fonts.body, fontSize: 13, color: "#3B3647" }}
+            >
+              {body}
+            </Text>
+          </View>
+          {onPress && <Icon name="chevron-right" size={22} />}
         </View>
+        {children}
       </LinearGradient>
     </Pressable>
   );
@@ -153,7 +165,7 @@ export function ShopTab({ search }: { search: string }) {
           heading="Results"
         />
       )}
-      <View style={{ flexDirection: "row", gap: 12 }}>
+      <View style={{ gap: 12 }}>
         <Entry
           icon="heart"
           title="Your saved looks"
@@ -166,8 +178,35 @@ export function ShopTab({ search }: { search: string }) {
           title="Scan to shop"
           body="Snap a piece, find it cheaper."
           tint={gradients.mint}
-          onPress={() => router.push("/(tabs)/scan")}
-        />
+        >
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {Platform.OS !== "web" && (
+              <TactileButton
+                icon="camera"
+                title="Take photo"
+                style={{ flex: 1.2 }}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(tabs)/scan",
+                    params: { pick: "camera" },
+                  })
+                }
+              />
+            )}
+            <TactileButton
+              icon="image"
+              title="Gallery"
+              fill={colors.white}
+              style={{ flex: 1 }}
+              onPress={() =>
+                router.push({
+                  pathname: "/(tabs)/scan",
+                  params: { pick: "gallery" },
+                })
+              }
+            />
+          </View>
+        </Entry>
       </View>
       {feed.isPending ? (
         <>
