@@ -48,11 +48,20 @@ export function PieceOptions({
     queryKey: ["shop-piece", piece.query],
     queryFn: () => shopPiece(piece.query),
     staleTime: Infinity,
-    retry: false,
+    retry: 1,
     enabled: !given,
   });
   const items = given ?? shop.data?.items ?? [];
   const pending = !given && shop.isPending;
+  if (!given && shop.isError)
+    return (
+      <Button
+        secondary
+        icon="refresh-cw"
+        title="Couldn’t load stores · Retry"
+        onPress={() => void shop.refetch()}
+      />
+    );
   if (!pending && !items.length) return null;
   const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
   async function open(index: number) {

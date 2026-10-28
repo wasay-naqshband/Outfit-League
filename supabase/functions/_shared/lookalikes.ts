@@ -220,17 +220,21 @@ export async function directOptions(
   request: typeof fetch = fetch,
   count = 3,
 ): Promise<Lookalike[]> {
-  const pool = await Promise.all(
-    pieceOptions(items, count + 3).map((item) =>
-      storeLink(key, item, request)
-        .then((url) => ({ ...item, url }))
-        .catch(() => item),
-    ),
-  );
-  return pieceOptions(
-    pool.filter((item) => !isGoogle(item.url)),
-    count,
-  );
+  // Up to 8 stores, 3 lookups at a time, stopping once `count` resolve: a
+  // burst of lookups gets throttled, and every throttled one was lost.
+  const candidates = pieceOptions(items, 8);
+  const found: Lookalike[] = [];
+  for (let i = 0; i < candidates.length && found.length < count; i += 3) {
+    const batch = await Promise.all(
+      candidates.slice(i, i + 3).map((item) =>
+        storeLink(key, item, request)
+          .then((url) => ({ ...item, url }))
+          .catch(() => item),
+      ),
+    );
+    found.push(...batch.filter((item) => !isGoogle(item.url)));
+  }
+  return pieceOptions(found, count);
 }
 // Shop tab rails: shared by everyone in a department and style, so results
 // are cached per query (and the shopper's department per account).

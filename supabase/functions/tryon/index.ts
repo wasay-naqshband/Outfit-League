@@ -1020,13 +1020,24 @@ Deno.serve(async (req) => {
         // Saved pieces and stylist pieces shop their own department; results
         // (links already resolved) are shared across shoppers.
         items: await (async () => {
-          const q = forDepartment(query, await shopperDepartment(owner));
-          return await cachedRail("piece:" + q, async () =>
+          const department = await shopperDepartment(owner);
+          const q = forDepartment(query, department);
+          const find = async (text: string) =>
             directOptions(
               serper,
-              await shopping(serper, q).catch(() => [] as Lookalike[]),
-            ),
-          ).catch(() => [] as Lookalike[]);
+              await shopping(serper, text).catch(() => [] as Lookalike[]),
+            );
+          // A very specific name can miss; retry with its last few words
+          // ("washed black super baggy jeans" → "super baggy jeans").
+          const words = q.split(" ");
+          return await cachedRail("piece:" + q, async () => {
+            const items = await find(q);
+            return items.length || words.length <= 3
+              ? items
+              : await find(
+                  forDepartment(words.slice(-3).join(" "), department),
+                );
+          }).catch(() => [] as Lookalike[]);
         })(),
       });
     }

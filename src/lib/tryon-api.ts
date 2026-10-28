@@ -174,8 +174,21 @@ export type ShopRail = { id: string; title: string; items: Lookalike[] };
 export const shopFeed = (styles: string[]) =>
   callTryOn<{ rails: ShopRail[] }>({ action: "shop-feed", styles });
 // Shop the look: real products for one piece, and the store's own page.
-export const shopPiece = (query: string) =>
-  callTryOn<{ items: Lookalike[] }>({ action: "shop-piece", query });
+let running = 0;
+const waiting: (() => void)[] = [];
+export async function shopPiece(query: string) {
+  if (running >= 2) await new Promise<void>((go) => waiting.push(go));
+  running++;
+  try {
+    return await callTryOn<{ items: Lookalike[] }>({
+      action: "shop-piece",
+      query,
+    });
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
 // Store pages open straight away; only Google Shopping links need resolving.
 export const pieceLink = async (item: Lookalike) =>
   !/(^|\.)google\./.test(new URL(item.url).hostname)
