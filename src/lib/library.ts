@@ -46,6 +46,12 @@ async function client() {
   if (!data.user) throw new Error("Please sign in to use your private Closet.");
   return { db: supabase, owner: data.user.id };
 }
+// The store search for a saved piece: its name, plus its colour when the
+// name doesn't already say it.
+export const shopQuery = (item: LibraryItem) =>
+  item.color && !item.name.toLowerCase().includes(item.color.toLowerCase())
+    ? `${item.color} ${item.name}`
+    : item.name;
 export async function libraryItem(id: string): Promise<LibraryItem> {
   const { db } = await client();
   const { data, error } = await db

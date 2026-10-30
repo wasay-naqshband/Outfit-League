@@ -662,7 +662,7 @@ export default function LibraryDetail() {
                   {item.source_url && (
                     <Button
                       icon="shopping-bag"
-                      title="Buy this exact piece"
+                      title="Shop the exact piece"
                       onPress={() => {
                         const url = cleanSourceUrl(item.source_url!);
                         if (url)
@@ -679,8 +679,8 @@ export default function LibraryDetail() {
                     disabled={busy}
                     onPress={() =>
                       router.push({
-                        pathname: "/shop",
-                        params: { library: item.id },
+                        pathname: "/shop-similar",
+                        params: { id: item.id },
                       })
                     }
                   />

@@ -231,7 +231,7 @@ function ShopProductCard({
         <Text
           style={{ fontFamily: fonts.bold, fontSize: 15, color: colors.white }}
         >
-          {busy ? "Opening…" : "Shop"}
+          {busy ? "Opening…" : "Shop now"}
         </Text>
         <Icon name="arrow-right" size={13} color={colors.white} />
       </Pressable>
@@ -239,7 +239,7 @@ function ShopProductCard({
   );
 }
 
-function Grid({
+export function Grid({
   items,
   fit,
   opening,
@@ -269,7 +269,7 @@ function Grid({
   );
 }
 
-function Bone({ style }: { style: ViewStyle }) {
+export function Bone({ style }: { style: ViewStyle }) {
   const reduce = useReduceMotion();
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -802,7 +802,7 @@ function SearchResults({
   return <Grid items={result.data.items} opening={opening} onShop={onShop} />;
 }
 
-function Retry({ onPress }: { onPress: () => void }) {
+export function Retry({ onPress }: { onPress: () => void }) {
   return (
     <View
       style={{

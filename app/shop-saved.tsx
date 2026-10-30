@@ -15,17 +15,10 @@ import {
   Page,
 } from "../src/components/ui";
 import { PieceOptions } from "../src/components/ShopTheLook";
-import { libraryPage, type LibraryItem } from "../src/lib/library";
+import { libraryPage, shopQuery } from "../src/lib/library";
 import { useApp } from "../src/lib/state";
 import { art } from "../src/data";
 import { colors, shadow } from "../src/theme";
-
-// The store search for a saved piece: its name, plus its colour when the
-// name doesn't already say it.
-const shopQuery = (item: LibraryItem) =>
-  item.color && !item.name.toLowerCase().includes(item.color.toLowerCase())
-    ? `${item.color} ${item.name}`
-    : item.name;
 
 // Shop → Your saved looks: each saved piece with the store options to buy it.
 export default function ShopSaved() {
