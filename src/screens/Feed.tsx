@@ -17,7 +17,17 @@ import { explorePage, cardOutfit } from "../lib/explore";
 import { useApp } from "../lib/state";
 import { styleLabel, useOnboarding } from "../lib/onboarding";
 
-const CHIPS = ["Trending", "Streetwear", "Minimal", "Y2K"];
+const CHIPS = [
+  "Trending",
+  "Streetwear",
+  "Y2K",
+  "Minimal",
+  "Casual",
+  "Vintage",
+  "Athleisure",
+  "Formal",
+  "Eastern",
+];
 
 export default function Feed() {
   const { session } = useApp();
@@ -152,7 +162,7 @@ export default function Feed() {
           </View>
         </>
       )}
-      <DemoNote text="Beta preview · product photos from Pakistani brand stores, not affiliated · prices may change" />
+      <DemoNote text="Beta preview · product photos from brand stores, not affiliated · prices may change" />
     </Page>
   );
 }
