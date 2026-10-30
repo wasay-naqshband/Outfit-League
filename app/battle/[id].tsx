@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
   Text,
   TextInput,
   View,
+  type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
@@ -24,6 +27,15 @@ import { BattleCards } from "../../src/components/BattleCards";
 import { LookPicker } from "../../src/components/LookPicker";
 import { Avatar } from "../../src/components/Avatar";
 import {
+  FitPicker,
+  GetTheApp,
+  ScoreBar,
+  Switch,
+  VoteHeader,
+  VoterChips,
+  hard,
+} from "../../src/components/BattleVote";
+import {
   battleCall,
   copyBattleLink,
   shareBattleLink,
@@ -38,20 +50,41 @@ import { useProfile } from "../../src/lib/queries";
 import { analytics } from "../../src/lib/analytics";
 import { colors, fonts } from "../../src/theme";
 
-function Chip({ text }: { text: string }) {
-  return (
-    <View
-      style={{
-        backgroundColor: colors.white,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 14,
-      }}
-    >
-      <Text style={{ fontFamily: fonts.medium, fontSize: 13 }}>{text}</Text>
-    </View>
-  );
-}
+const NAME_KEY = "outfit-league-voter-name";
+const card: ViewStyle = {
+  backgroundColor: colors.white,
+  borderRadius: 28,
+  padding: 16,
+  gap: 12,
+  shadowColor: colors.ink,
+  shadowOpacity: 0.08,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 3,
+};
+const input: TextStyle = {
+  flex: 1,
+  height: 52,
+  backgroundColor: "#FFF8D9",
+  borderRadius: 18,
+  paddingHorizontal: 16,
+  fontFamily: fonts.body,
+  fontSize: 16,
+  color: colors.ink,
+};
+const errorText: TextStyle = {
+  fontFamily: fonts.medium,
+  fontSize: 13,
+  color: "#B3301C",
+};
+const ago = (at: string) => {
+  const m = Math.max(1, Math.round((Date.now() - Date.parse(at)) / 60000));
+  return m < 60
+    ? `${m}m`
+    : m < 1440
+      ? `${Math.round(m / 60)}h`
+      : `${Math.round(m / 1440)}d`;
+};
 
 function RoundAction({
   icon,
@@ -151,11 +184,34 @@ export default function BattleDetail() {
   const [menu, setMenu] = useState<number | null>(null);
   const [reported, setReported] = useState<number[]>([]);
   const [stopping, setStopping] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [allComments, setAllComments] = useState(false);
+  const nameField = useRef<TextInput>(null);
+  // Which action the current message belongs to, so errors show beside it.
+  const last = useRef("");
   const lock = useRef(false);
   const battle = query.data;
   useEffect(() => {
     if (profile.data?.name) setName(profile.data.name);
   }, [profile.data?.name]);
+  // Web visitors: remember the name for comments and repeat visits.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    try {
+      const saved = localStorage.getItem(NAME_KEY);
+      if (saved) setName((n) => n || saved);
+    } catch {
+      /* storage blocked: they type it again */
+    }
+  }, []);
+  useEffect(() => {
+    if (Platform.OS !== "web" || name.trim().length < 2) return;
+    try {
+      localStorage.setItem(NAME_KEY, name.trim());
+    } catch {
+      /* storage blocked */
+    }
+  }, [name]);
 
   async function action(type: string, fields: Record<string, unknown> = {}) {
     if (lock.current) return false;
@@ -188,6 +244,7 @@ export default function BattleDetail() {
   }
   async function share(how: "sheet" | "copy" | "whatsapp" = "sheet") {
     if (!battle) return;
+    last.current = "share";
     const text =
       battle.status === "waiting"
         ? "⚡ Fit battle! Join me with your look and let the squad decide 👀"
@@ -199,7 +256,10 @@ export default function BattleDetail() {
       analytics.track("battle_shared", {
         method: how === "copy" ? "copy" : "share",
       });
-      if (how === "copy") setMessage("Link copied ✓ Paste it anywhere.");
+      if (how === "copy") {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     } catch (e) {
       if (e instanceof Error && e.name !== "AbortError") setMessage(e.message);
     }
@@ -270,13 +330,29 @@ export default function BattleDetail() {
     return (
       <View
         key={c.id}
-        style={{ gap: 6, marginLeft: nested ? 40 : 0, paddingTop: nested ? 8 : 0 }}
+        style={{
+          gap: 6,
+          marginLeft: nested ? 40 : 0,
+          paddingTop: nested ? 8 : 0,
+        }}
       >
         <View style={{ flexDirection: "row", gap: 10 }}>
-          <Avatar name={c.name} size={32} />
+          <Avatar name={c.name} size={28} />
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ fontFamily: fonts.bold, fontSize: 14 }}>{c.name}</Text>
-            <Body style={{ fontSize: 15, color: colors.ink }}>{c.body}</Body>
+            <Text style={{ fontFamily: fonts.bold, fontSize: 13 }}>
+              {c.name}
+              <Text
+                style={{
+                  fontFamily: fonts.body,
+                  fontSize: 12,
+                  color: "#8A8597",
+                }}
+              >
+                {"  "}
+                {ago(c.at)}
+              </Text>
+            </Text>
+            <Body style={{ fontSize: 14, color: colors.ink }}>{c.body}</Body>
           </View>
           {(c.mine || battle?.isOwner) && (
             <Pressable
@@ -296,43 +372,93 @@ export default function BattleDetail() {
               onPress={() => setMenu(menu === c.id ? null : c.id)}
               style={{ paddingHorizontal: 6, paddingVertical: 2 }}
             >
-              <Text style={{ fontFamily: fonts.bold, fontSize: 18, color: colors.text3 }}>⋯</Text>
+              <Text
+                style={{
+                  fontFamily: fonts.bold,
+                  fontSize: 18,
+                  color: colors.text3,
+                }}
+              >
+                ⋯
+              </Text>
             </Pressable>
           )}
         </View>
-        <View style={{ flexDirection: "row", gap: 16, marginLeft: 42 }}>
+        <View style={{ flexDirection: "row", gap: 16, marginLeft: 38 }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={c.liked ? "Unlike comment" : "Like comment"}
             disabled={busy}
             onPress={() => void action("like-comment", { commentId: c.id })}
           >
-            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: c.liked ? colors.ink : colors.text3 }}>
+            <Text
+              style={{
+                fontFamily: fonts.medium,
+                fontSize: 13,
+                color: c.liked ? colors.ink : colors.text3,
+              }}
+            >
               {c.liked ? "♥" : "♡"} Like{c.likes ? ` · ${c.likes}` : ""}
             </Text>
           </Pressable>
           {!nested && live && (
-            <Pressable onPress={() => setReplyTo(c.id)} accessibilityRole="button">
-              <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.text3 }}>Reply</Text>
+            <Pressable
+              onPress={() => setReplyTo(c.id)}
+              accessibilityRole="button"
+            >
+              <Text
+                style={{
+                  fontFamily: fonts.medium,
+                  fontSize: 13,
+                  color: colors.text3,
+                }}
+              >
+                Reply
+              </Text>
             </Pressable>
           )}
-          <Pressable onPress={() => void shareComment(c.name, c.body)} accessibilityRole="button">
-            <Text style={{ fontFamily: fonts.medium, fontSize: 13, color: colors.text3 }}>Share</Text>
+          <Pressable
+            onPress={() => void shareComment(c.name, c.body)}
+            accessibilityRole="button"
+          >
+            <Text
+              style={{
+                fontFamily: fonts.medium,
+                fontSize: 13,
+                color: colors.text3,
+              }}
+            >
+              Share
+            </Text>
           </Pressable>
         </View>
         {menu === c.id && (
           <View style={{ flexDirection: "row", gap: 8, marginLeft: 42 }}>
             {reported.includes(c.id) ? (
-              <Body style={{ fontSize: 13 }}>Reported. Thanks, we’ll review it.</Body>
+              <Body style={{ fontSize: 13 }}>
+                Reported. Thanks, we’ll review it.
+              </Body>
             ) : (
               <>
                 <Pill
                   label="Report"
-                  onPress={() => void action("report-comment", { commentId: c.id }).then((ok) => ok && setReported((r) => [...r, c.id]))}
+                  onPress={() =>
+                    void action("report-comment", { commentId: c.id }).then(
+                      (ok) => ok && setReported((r) => [...r, c.id]),
+                    )
+                  }
                 />
                 <Pill
                   label={`Block ${c.name}`}
-                  onPress={() => void action("block", { commentId: c.id }).then((ok) => ok && setMessage(`You won’t see comments from ${c.name} any more.`))}
+                  onPress={() =>
+                    void action("block", { commentId: c.id }).then(
+                      (ok) =>
+                        ok &&
+                        setMessage(
+                          `You won’t see comments from ${c.name} any more.`,
+                        ),
+                    )
+                  }
                 />
               </>
             )}
@@ -342,473 +468,738 @@ export default function BattleDetail() {
     );
   }
 
+  const pair = battle?.options.length === 2;
+  const voter = live && !battle?.isOwner && !battle?.isFriend;
+  const blocked = !choice
+    ? "Pick a fit first"
+    : battle?.mode === "public" && name.trim().length < 2
+      ? "Add your name"
+      : battle?.mode === "public" && !consent
+        ? "Turn on “Show my name”"
+        : null;
+  const [ca, cb] = battle
+    ? battle.options.map((o) => battle.counts[o.side])
+    : [];
+  const winner =
+    pair && ca !== cb ? battle!.options[ca! > cb! ? 0 : 1]!.side : null;
+  const threads = battle?.comments.filter((c) => !c.parentId) ?? [];
+  const band =
+    !!battle && !["waiting"].includes(battle.status) && !query.isError;
+  function sendComment() {
+    last.current = "comment";
+    if (name.trim().length < 2) {
+      setMessage("Add your name to comment");
+      nameField.current?.focus();
+      return;
+    }
+    void action("comment", { name, body: comment, parentId: replyTo }).then(
+      (ok) => {
+        if (ok) {
+          setComment("");
+          setReplyTo(null);
+        }
+      },
+    );
+  }
+
   return (
     <Page>
-      <FlatHeader
-        title={battle?.kind === "versus" ? "Fit battle" : "Help me choose"}
-      />
-      <View style={{ padding: 20, gap: 16 }}>
-        {query.isPending ? (
-          <LoadingSkeleton />
-        ) : query.isError || !battle ? (
-          <ErrorState
-            message="This battle is unavailable or no longer shared."
-            retry={() => void query.refetch()}
+      <View style={{ width: "100%", maxWidth: 480, alignSelf: "center" }}>
+        {band ? (
+          <VoteHeader
+            battle={battle!}
+            total={total}
+            back={
+              Platform.OS !== "web" || router.canGoBack()
+                ? () =>
+                    router.canGoBack()
+                      ? router.back()
+                      : router.replace("/(tabs)")
+                : undefined
+            }
           />
-        ) : battle.status === "waiting" ? (
-          // Versus invite: the challenger waits; a friend joins with a look.
-          <>
-            <View style={{ alignItems: "center", gap: 10 }}>
-              <Avatar
-                uri={challenger?.avatar}
-                name={challenger?.name ?? undefined}
-                size={72}
-              />
-              <Heading size={26} style={{ textAlign: "center" }}>
-                {battle.isOwner
-                  ? "Waiting for your friend…"
-                  : `${challenger?.name ?? "A friend"} challenged you!`}
-              </Heading>
-              <Body style={{ textAlign: "center" }}>{battle.title}</Body>
-            </View>
-            {battle.options[0]?.url && (
-              <Image
-                source={{ uri: battle.options[0].url }}
-                contentFit="cover"
-                cachePolicy="none"
-                style={{
-                  height: 300,
-                  borderRadius: 26,
-                  backgroundColor: colors.white,
-                }}
-              />
-            )}
-            {battle.isOwner ? (
-              <>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <Button
-                    style={{ flex: 1 }}
-                    icon="share"
-                    title="Send invite"
-                    onPress={() => void share()}
-                  />
-                  <RoundAction
-                    icon="whatsapp"
-                    label="Invite on WhatsApp"
-                    onPress={() => void share("whatsapp")}
-                  />
-                  <RoundAction
-                    icon="copy"
-                    label="Copy invite link"
-                    onPress={() => void share("copy")}
-                  />
-                </View>
-                <Body style={{ textAlign: "center", fontSize: 13 }}>
-                  When your friend joins with their look, the battle goes live
-                  and you can share it for votes.
-                </Body>
-              </>
-            ) : !session ? (
-              <Button title="Sign in to accept" onPress={signIn} />
-            ) : (
-              <>
-                <Heading size={20}>Pick your look</Heading>
-                <LookPicker selected={pick} max={1} onChange={setPick} />
+        ) : (
+          <FlatHeader
+            title={battle?.kind === "versus" ? "Fit battle" : "Help me choose"}
+          />
+        )}
+        <View style={{ padding: 20, gap: 18 }}>
+          {query.isPending ? (
+            <LoadingSkeleton />
+          ) : query.isError || !battle ? (
+            <>
+              <View style={[card, { alignItems: "center", gap: 12 }]}>
+                <Icon name="hanger" size={34} />
+                <Heading size={22} style={{ textAlign: "center" }}>
+                  This battle isn’t available
+                </Heading>
                 <Button
-                  icon="zap"
-                  title={busy ? "Joining…" : "Accept the battle"}
-                  disabled={busy || pick.length !== 1}
-                  onPress={() =>
-                    void action("join", {
-                      sourceKind: "job",
-                      sourceId: pick[0],
-                    })
+                  secondary
+                  title="Try again"
+                  onPress={() => void query.refetch()}
+                />
+              </View>
+              <GetTheApp />
+            </>
+          ) : battle.status === "waiting" ? (
+            // Versus invite: the challenger waits; a friend joins with a look.
+            <>
+              <View style={{ alignItems: "center", gap: 10 }}>
+                <Avatar
+                  uri={challenger?.avatar}
+                  name={challenger?.name ?? undefined}
+                  size={72}
+                />
+                <Heading size={26} style={{ textAlign: "center" }}>
+                  {battle.isOwner
+                    ? "Waiting for your friend…"
+                    : `${challenger?.name ?? "A friend"} challenged you!`}
+                </Heading>
+                <Body style={{ textAlign: "center" }}>{battle.title}</Body>
+              </View>
+              {battle.options[0]?.url && (
+                <Image
+                  source={{ uri: battle.options[0].url }}
+                  contentFit="cover"
+                  cachePolicy="none"
+                  style={{
+                    height: 300,
+                    borderRadius: 26,
+                    backgroundColor: colors.white,
+                  }}
+                />
+              )}
+              {battle.isOwner ? (
+                <>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <Button
+                      style={{ flex: 1 }}
+                      icon="share"
+                      title="Send invite"
+                      onPress={() => void share()}
+                    />
+                    <RoundAction
+                      icon="whatsapp"
+                      label="Invite on WhatsApp"
+                      onPress={() => void share("whatsapp")}
+                    />
+                    <RoundAction
+                      icon="copy"
+                      label="Copy invite link"
+                      onPress={() => void share("copy")}
+                    />
+                  </View>
+                  <Body style={{ textAlign: "center", fontSize: 13 }}>
+                    When your friend joins with their look, the battle goes live
+                    and you can share it for votes.
+                  </Body>
+                </>
+              ) : !session ? (
+                <Button title="Sign in to accept" onPress={signIn} />
+              ) : (
+                <>
+                  <Heading size={20}>Pick your look</Heading>
+                  <LookPicker selected={pick} max={1} onChange={setPick} />
+                  <Button
+                    icon="zap"
+                    title={busy ? "Joining…" : "Accept the battle"}
+                    disabled={busy || pick.length !== 1}
+                    onPress={() =>
+                      void action("join", {
+                        sourceKind: "job",
+                        sourceId: pick[0],
+                      })
+                    }
+                  />
+                  <Body style={{ fontSize: 12, textAlign: "center" }}>
+                    Anyone with the link will see your look, name and profile
+                    photo.
+                  </Body>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {pair ? (
+                <FitPicker
+                  battle={battle}
+                  choice={battle.mine ?? choice}
+                  onSelect={canVote && !busy ? setChoice : undefined}
+                  hint={
+                    canVote
+                      ? choice
+                        ? "Changed your mind? Tap the other one."
+                        : "Tap a fit to pick it"
+                      : undefined
                   }
                 />
-                <Body style={{ fontSize: 12, textAlign: "center" }}>
-                  Anyone with the link will see your look, name and profile
-                  photo.
-                </Body>
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <Heading size={28}>{battle.title}</Heading>
-            {live && (
-              <Body style={{ textAlign: "center", fontSize: 14 }}>
-                Anyone with this link can vote and comment—no sign-up or sign-in needed.
-              </Body>
-            )}
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              <Chip
-                text={
-                  battle.mode === "public" ? "👥 Public votes" : "🙈 Anonymous"
-                }
-              />
-              <Chip text={`${total} ${total === 1 ? "vote" : "votes"}`} />
-              {battle.status === "closed" && <Chip text="Voting closed" />}
-              {battle.status === "draft" && <Chip text="Draft" />}
-              {["unpublished", "hidden"].includes(battle.status) && (
-                <Chip text="No longer shared" />
+              ) : (
+                <BattleCards
+                  battle={battle}
+                  choice={battle.mine ?? choice}
+                  onSelect={canVote && !busy ? setChoice : undefined}
+                  results={showResults}
+                />
               )}
-            </View>
-            <BattleCards
-              battle={battle}
-              choice={battle.mine ?? choice}
-              onSelect={canVote && !busy ? setChoice : undefined}
-              results={showResults}
-            />
-            {battle.mine && (
-              <Body style={{ textAlign: "center" }}>
-                You picked {battle.mine} ✓
-              </Body>
-            )}
-            {canVote &&
-              (
-                <>
-                  {battle.mode === "public" && (
-                    <>
-                      <TextInput
-                        accessibilityLabel="Your name"
-                        value={name}
-                        onChangeText={setName}
-                        maxLength={40}
-                        placeholder="Your name"
-                        placeholderTextColor={colors.placeholder}
+              {voter && (
+                <View style={card}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                      height: 52,
+                      borderRadius: 18,
+                      backgroundColor: "#FFF8D9",
+                      paddingHorizontal: 16,
+                    }}
+                  >
+                    <Icon name="user" size={20} color={colors.text3} />
+                    <TextInput
+                      ref={nameField}
+                      accessibilityLabel="Your name"
+                      value={name}
+                      onChangeText={setName}
+                      maxLength={40}
+                      placeholder="Your name"
+                      placeholderTextColor={colors.placeholder}
+                      style={{
+                        flex: 1,
+                        height: 52,
+                        fontFamily: fonts.body,
+                        fontSize: 16,
+                        color: colors.ink,
+                      }}
+                    />
+                  </View>
+                  {battle.mode === "public" && !battle.mine && (
+                    <Switch
+                      value={consent}
+                      label="Show my name with my vote"
+                      onChange={setConsent}
+                    />
+                  )}
+                  {battle.mine ? (
+                    <View
+                      accessibilityLiveRegion="polite"
+                      style={{
+                        height: 62,
+                        borderRadius: 22,
+                        backgroundColor: "#D7F6E3",
+                        borderWidth: 2.5,
+                        borderColor: "#127A55",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                      }}
+                    >
+                      <Icon name="check" size={22} color="#127A55" />
+                      <Text
                         style={{
-                          backgroundColor: colors.white,
-                          borderRadius: 18,
-                          padding: 16,
-                          fontFamily: fonts.body,
-                          fontSize: 16,
-                          color: colors.ink,
+                          fontFamily: fonts.heading,
+                          fontSize: 20,
+                          color: "#0E5A3F",
                         }}
-                      />
-                      <Pressable
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: consent }}
-                        onPress={() => setConsent(!consent)}
+                      >
+                        You voted {battle.mine}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !!blocked || busy }}
+                      disabled={!!blocked || busy}
+                      onPress={() => {
+                        last.current = "vote";
+                        void action("vote", {
+                          choice,
+                          name,
+                          publicConsent: consent,
+                        });
+                      }}
+                      style={({ pressed }) => ({
+                        height: 62,
+                        borderRadius: 22,
+                        borderWidth: blocked ? 0 : 2.5,
+                        borderColor: colors.ink,
+                        backgroundColor: blocked ? "#E6E1D2" : colors.yellow,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 10,
+                        ...(blocked ? {} : hard(pressed ? 2 : 4)),
+                        transform: [
+                          { translateY: pressed && !blocked ? 2 : 0 },
+                        ],
+                      })}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color={colors.ink} />
+                      ) : (
+                        <>
+                          {!blocked && <Icon name="zap" size={22} />}
+                          <Text
+                            style={{
+                              fontFamily: fonts.heading,
+                              fontSize: 20,
+                              color: blocked ? "#8A8597" : colors.ink,
+                            }}
+                          >
+                            {blocked ?? `Vote for ${choice}`}
+                          </Text>
+                        </>
+                      )}
+                    </Pressable>
+                  )}
+                  {!!message && last.current === "vote" && (
+                    <Text style={errorText}>{message}</Text>
+                  )}
+                </View>
+              )}
+              {["published", "closed"].includes(battle.status) && (
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void share("whatsapp")}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      height: 54,
+                      borderRadius: 20,
+                      backgroundColor: "#25D366",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 10,
+                      transform: [{ translateY: pressed ? 2 : 0 }],
+                    })}
+                  >
+                    <Icon name="whatsapp" size={22} color={colors.white} />
+                    <Text
+                      style={{
+                        fontFamily: fonts.bold,
+                        fontSize: 16,
+                        color: colors.white,
+                      }}
+                    >
+                      Get more votes
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy link"
+                    onPress={() => void share("copy")}
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: 20,
+                      borderWidth: 2,
+                      borderColor: colors.ink,
+                      backgroundColor: colors.white,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Icon name={copied ? "check" : "link"} size={22} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Share"
+                    onPress={() => void share()}
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: 20,
+                      backgroundColor: colors.ink,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Icon name="share" size={22} color={colors.yellow} />
+                  </Pressable>
+                </View>
+              )}
+              {copied && (
+                <Text
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    alignSelf: "center",
+                    marginTop: -6,
+                    backgroundColor: colors.ink,
+                    color: colors.white,
+                    fontFamily: fonts.bold,
+                    fontSize: 13,
+                    borderRadius: 999,
+                    paddingHorizontal: 14,
+                    paddingVertical: 6,
+                    overflow: "hidden",
+                  }}
+                >
+                  Link copied
+                </Text>
+              )}
+              <View style={{ gap: 12 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "baseline",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <Text style={{ fontFamily: fonts.heading, fontSize: 22 }}>
+                    The score
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fonts.medium,
+                      fontSize: 13,
+                      color: colors.text3,
+                    }}
+                  >
+                    {total} {total === 1 ? "vote" : "votes"}
+                  </Text>
+                </View>
+                {battle.status === "closed" && total > 0 && (
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    style={{ fontFamily: fonts.bold, fontSize: 16 }}
+                  >
+                    {winner ? `${winner} won` : "It’s a tie"}
+                  </Text>
+                )}
+                {!showResults ? (
+                  <Body style={{ fontSize: 14 }}>Vote to see the score.</Body>
+                ) : pair ? (
+                  <ScoreBar battle={battle} />
+                ) : null}
+                {battle.mode === "public" && battle.voters.length > 0 && (
+                  <VoterChips voters={battle.voters} />
+                )}
+              </View>
+              {["published", "closed"].includes(battle.status) && (
+                <View
+                  style={[card, { paddingTop: 18, paddingBottom: 14, gap: 14 }]}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Text style={{ fontFamily: fonts.heading, fontSize: 22 }}>
+                      Hot takes
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: "#F1EEE4",
+                        borderRadius: 999,
+                        paddingHorizontal: 10,
+                        paddingVertical: 3,
+                      }}
+                    >
+                      <Text style={{ fontFamily: fonts.bold, fontSize: 13 }}>
+                        {battle.comments.length}
+                      </Text>
+                    </View>
+                  </View>
+                  {!battle.comments.length ? (
+                    live ? (
+                      <View
+                        style={{
+                          borderWidth: 2,
+                          borderStyle: "dashed",
+                          borderColor: "#E6E1D2",
+                          borderRadius: 20,
+                          padding: 18,
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: colors.yellow,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Icon name="send" size={18} />
+                        </View>
+                        <Text
+                          style={{
+                            fontFamily: fonts.body,
+                            fontSize: 14,
+                            color: colors.text2,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: fonts.bold,
+                              color: colors.ink,
+                            }}
+                          >
+                            Quiet in here.
+                          </Text>{" "}
+                          Drop the first take.
+                        </Text>
+                      </View>
+                    ) : null
+                  ) : (
+                    <>
+                      {threads.slice(allComments ? 0 : -5).map((c) => (
+                        <View key={c.id} style={{ gap: 6 }}>
+                          {renderComment(c)}
+                          {battle.comments
+                            .filter((reply) => reply.parentId === c.id)
+                            .map((reply) => renderComment(reply, true))}
+                        </View>
+                      ))}
+                      {!allComments && threads.length > 5 && (
+                        <TextLink
+                          title={`Show all ${threads.length}`}
+                          onPress={() => setAllComments(true)}
+                        />
+                      )}
+                    </>
+                  )}
+                  {live ? (
+                    <>
+                      {replyTo !== null && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                          }}
+                        >
+                          <Body style={{ fontSize: 13 }}>
+                            Replying to{" "}
+                            {
+                              battle.comments.find((c) => c.id === replyTo)
+                                ?.name
+                            }
+                          </Body>
+                          <Pressable
+                            onPress={() => setReplyTo(null)}
+                            accessibilityRole="button"
+                          >
+                            <Text style={{ color: colors.text3 }}>Cancel</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                      {pair && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            flexWrap: "wrap",
+                            gap: 8,
+                          }}
+                        >
+                          {[
+                            ["A is the one", colors.pink],
+                            ["B, easy", "#9FD0FF"],
+                            ["Both go hard", colors.white],
+                          ].map(([text, fill]) => (
+                            <Pressable
+                              key={text}
+                              accessibilityRole="button"
+                              accessibilityLabel={`Quick reply: ${text}`}
+                              onPress={() => setComment(text!)}
+                              style={{
+                                height: 36,
+                                justifyContent: "center",
+                                paddingHorizontal: 14,
+                                borderRadius: 999,
+                                backgroundColor: fill,
+                                borderWidth: 2,
+                                borderColor:
+                                  fill === colors.white ? "#E6E1D2" : fill,
+                              }}
+                            >
+                              <Text
+                                style={{ fontFamily: fonts.bold, fontSize: 13 }}
+                              >
+                                {text}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                      {!voter && !name.trim() && (
+                        <TextInput
+                          ref={nameField}
+                          accessibilityLabel="Your name"
+                          value={name}
+                          onChangeText={setName}
+                          maxLength={40}
+                          placeholder="Your name"
+                          placeholderTextColor={colors.placeholder}
+                          style={[input, { flex: undefined }]}
+                        />
+                      )}
+                      <View
                         style={{
                           flexDirection: "row",
                           gap: 10,
                           alignItems: "center",
                         }}
                       >
-                        <View
+                        <TextInput
+                          accessibilityLabel="Write a comment"
+                          value={comment}
+                          onChangeText={setComment}
+                          maxLength={280}
+                          placeholder={
+                            replyTo === null
+                              ? "Add a comment…"
+                              : "Write a reply…"
+                          }
+                          placeholderTextColor={colors.placeholder}
+                          style={input}
+                        />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Post comment"
+                          disabled={busy || !comment.trim()}
+                          onPress={sendComment}
                           style={{
-                            width: 22,
-                            height: 22,
-                            borderRadius: 6,
-                            borderWidth: 2,
+                            width: 52,
+                            height: 52,
+                            borderRadius: 26,
+                            backgroundColor: colors.yellow,
+                            borderWidth: 2.5,
                             borderColor: colors.ink,
-                            backgroundColor: consent
-                              ? colors.ink
-                              : colors.white,
                             alignItems: "center",
                             justifyContent: "center",
+                            opacity: comment.trim() ? 1 : 0.5,
+                            ...hard(3),
                           }}
                         >
-                          {consent && (
-                            <Icon
-                              name="check"
-                              size={14}
-                              color={colors.yellow}
-                            />
-                          )}
-                        </View>
-                        <Body style={{ flex: 1, fontSize: 13 }}>
-                          Show my name and vote publicly
-                        </Body>
-                      </Pressable>
-                    </>
-                  )}
-                  <Button
-                    title={
-                      busy
-                        ? "Voting…"
-                        : choice
-                          ? `Vote for ${choice}`
-                          : "Tap a look to vote"
-                    }
-                    disabled={
-                      busy ||
-                      !choice ||
-                      (battle.mode === "public" &&
-                        (!consent || name.trim().length < 2))
-                    }
-                    onPress={() =>
-                      void action("vote", {
-                        choice,
-                        name,
-                        publicConsent: consent,
-                      })
-                    }
-                  />
-                </>
-              )}
-            {["published", "closed"].includes(battle.status) && (
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <Button
-                  style={{ flex: 1 }}
-                  icon="share"
-                  title={battle.isOwner ? "Share for votes" : "Share"}
-                  onPress={() => void share()}
-                />
-                <RoundAction
-                  icon="whatsapp"
-                  label="Share on WhatsApp"
-                  onPress={() => void share("whatsapp")}
-                />
-                <RoundAction
-                  icon="copy"
-                  label="Copy link"
-                  onPress={() => void share("copy")}
-                />
-              </View>
-            )}
-            {battle.mode === "public" && battle.voters.length > 0 && (
-              <View
-                style={{
-                  backgroundColor: colors.white,
-                  borderRadius: 22,
-                  padding: 16,
-                  gap: 10,
-                }}
-              >
-                <Heading size={18}>Who picked what</Heading>
-                {battle.voters.map((voter) => (
-                  <View
-                    key={voter.id}
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Body style={{ flex: 1 }}>{voter.display_name}</Body>
-                    <Heading size={16}>{voter.choice}</Heading>
-                  </View>
-                ))}
-              </View>
-            )}
-            {["published", "closed"].includes(battle.status) && (
-              <View
-                style={{
-                  backgroundColor: colors.white,
-                  borderRadius: 22,
-                  padding: 16,
-                  gap: 12,
-                }}
-              >
-                <Heading size={18}>
-                  Comments
-                  {battle.comments.length ? ` · ${battle.comments.length}` : ""}
-                </Heading>
-                <Body style={{ fontSize: 13 }}>
-                  {live
-                    ? "Anyone with this link can comment while the battle is live—no account needed."
-                    : "Comments are closed with this battle."}
-                </Body>
-                {!battle.comments.length && (
-                  <Body style={{ fontSize: 14 }}>
-                    {live
-                      ? "No comments yet. Say what you think!"
-                      : "No comments."}
-                  </Body>
-                )}
-                {battle.comments.filter((c) => !c.parentId).map((c) => (
-                  <View key={c.id} style={{ gap: 6 }}>
-                    {renderComment(c)}
-                    {battle.comments.filter((reply) => reply.parentId === c.id).map((reply) => renderComment(reply, true))}
-                  </View>
-                ))}
-                {live && (
-                  <>
-                    {replyTo !== null && (
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                        <Body style={{ fontSize: 13 }}>Replying to {battle.comments.find((c) => c.id === replyTo)?.name}</Body>
-                        <Pressable onPress={() => setReplyTo(null)} accessibilityRole="button"><Text style={{ color: colors.text3 }}>Cancel</Text></Pressable>
+                          <Icon name="send" size={20} />
+                        </Pressable>
                       </View>
-                    )}
-                    {!profile.data?.name && (
-                      <TextInput
-                        accessibilityLabel="Your name"
-                        value={name}
-                        onChangeText={setName}
-                        maxLength={40}
-                        placeholder="Your name"
-                        placeholderTextColor={colors.placeholder}
-                        style={{
-                          backgroundColor: colors.cream,
-                          borderRadius: 16,
-                          padding: 12,
-                          fontFamily: fonts.body,
-                          fontSize: 15,
-                          color: colors.ink,
-                        }}
-                      />
-                    )}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        gap: 8,
-                        alignItems: "center",
-                      }}
-                    >
-                      <TextInput
-                        accessibilityLabel="Write a comment"
-                        value={comment}
-                        onChangeText={setComment}
-                        maxLength={280}
-                        placeholder={replyTo === null ? "Add a comment…" : "Write a reply…"}
-                        placeholderTextColor={colors.placeholder}
-                        style={{
-                          flex: 1,
-                          backgroundColor: colors.cream,
-                          borderRadius: 16,
-                          padding: 12,
-                          fontFamily: fonts.body,
-                          fontSize: 15,
-                          color: colors.ink,
-                        }}
-                      />
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Post comment"
-                        disabled={
-                          busy || !comment.trim() || name.trim().length < 2
-                        }
-                        onPress={() =>
-                          void action("comment", { name, body: comment, parentId: replyTo }).then(
-                            (ok) => { if (ok) { setComment(""); setReplyTo(null); } },
-                          )
-                        }
-                        style={{
-                          width: 46,
-                          height: 46,
-                          borderRadius: 23,
-                          backgroundColor:
-                            comment.trim() && name.trim().length >= 2
-                              ? colors.ink
-                              : colors.inactive,
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Icon name="send" size={18} color={colors.yellow} />
-                      </Pressable>
-                    </View>
-                    <Text
-                      style={{
-                        fontFamily: fonts.body,
-                        fontSize: 11,
-                        color: colors.text3,
-                      }}
-                    >
-                      Keep it kind. By commenting you agree to our{" "}
+                      {!!message && last.current === "comment" && (
+                        <Text style={errorText}>{message}</Text>
+                      )}
                       <Text
-                        accessibilityRole="link"
-                        onPress={() => router.push("/terms")}
-                        style={{ textDecorationLine: "underline" }}
+                        style={{
+                          fontFamily: fonts.body,
+                          fontSize: 12,
+                          color: "#8A8597",
+                        }}
                       >
-                        Terms
+                        Keep it kind ·{" "}
+                        <Text
+                          accessibilityRole="link"
+                          onPress={() => router.push("/terms")}
+                          style={{ textDecorationLine: "underline" }}
+                        >
+                          Terms
+                        </Text>
                       </Text>
-                      .
-                    </Text>
-                  </>
-                )}
-              </View>
-            )}
-            {live && battle.isOwner && (
-              <Body style={{ fontSize: 13, textAlign: "center" }}>
-                Posting to a story? Screenshot this, add it to your story and
-                put the copied link in a Link sticker.
-              </Body>
-            )}
-          </>
-        )}
-        {!!message && <Body style={{ textAlign: "center" }}>{message}</Body>}
-        {battle && (battle.isOwner || battle.status !== "waiting") && (
-          <View style={{ alignItems: "center" }}>
-            {!more ? (
-              <TextLink title="More options" onPress={() => setMore(true)} />
-            ) : (
-              <View style={{ alignSelf: "stretch", gap: 8 }}>
-                {battle.isOwner && live && (
-                  <Button
-                    secondary
-                    title="Close voting"
-                    disabled={busy}
-                    onPress={() => void action("close")}
-                  />
-                )}
-                {battle.isOwner && (
-                  <Button
-                    secondary
-                    icon="trash-2"
-                    title="Delete battle"
-                    disabled={busy}
-                    style={{ borderColor: "#D86A63" }}
-                    onPress={confirmDelete}
-                  />
-                )}
-                {battle.isOwner &&
-                  ["draft", "waiting", "published", "closed"].includes(
-                    battle.status,
-                  ) &&
-                  (stopping ? (
-                    <>
-                      <Body style={{ fontSize: 13, textAlign: "center" }}>
-                        People with the link lose access. Saved screenshots
-                        can’t be recalled. This can’t be undone.
-                      </Body>
-                      <Button
-                        title="Stop sharing"
-                        disabled={busy}
-                        onPress={() => void action("unpublish")}
-                      />
                     </>
                   ) : (
+                    <Body style={{ fontSize: 14 }}>Comments are closed.</Body>
+                  )}
+                </View>
+              )}
+              {live && battle.isOwner && (
+                <Body style={{ fontSize: 13, textAlign: "center" }}>
+                  Posting to a story? Screenshot this, add it to your story and
+                  put the copied link in a Link sticker.
+                </Body>
+              )}
+              {!battle.isOwner && <GetTheApp battle={battle} />}
+            </>
+          )}
+          {!!message && !["vote", "comment"].includes(last.current) && (
+            <Body style={{ textAlign: "center" }}>{message}</Body>
+          )}
+          {battle && (battle.isOwner || battle.status !== "waiting") && (
+            <View style={{ alignItems: "center" }}>
+              {!more ? (
+                <TextLink title="More options" onPress={() => setMore(true)} />
+              ) : (
+                <View style={{ alignSelf: "stretch", gap: 8 }}>
+                  {battle.isOwner && live && (
                     <Button
                       secondary
-                      title="Stop sharing"
-                      onPress={() => setStopping(true)}
+                      title="Close voting"
+                      disabled={busy}
+                      onPress={() => void action("close")}
                     />
-                  ))}
-                {!battle.isOwner &&
-                  (reporting ? (
-                    [
-                      "Inappropriate image",
-                      "Harassment",
-                      "Privacy concern",
-                      "Other",
-                    ].map((reason) => (
+                  )}
+                  {battle.isOwner && (
+                    <Button
+                      secondary
+                      icon="trash-2"
+                      title="Delete battle"
+                      disabled={busy}
+                      style={{ borderColor: "#D86A63" }}
+                      onPress={confirmDelete}
+                    />
+                  )}
+                  {battle.isOwner &&
+                    ["draft", "waiting", "published", "closed"].includes(
+                      battle.status,
+                    ) &&
+                    (stopping ? (
+                      <>
+                        <Body style={{ fontSize: 13, textAlign: "center" }}>
+                          People with the link lose access. Saved screenshots
+                          can’t be recalled. This can’t be undone.
+                        </Body>
+                        <Button
+                          title="Stop sharing"
+                          disabled={busy}
+                          onPress={() => void action("unpublish")}
+                        />
+                      </>
+                    ) : (
                       <Button
-                        key={reason}
                         secondary
-                        title={reason}
-                        disabled={busy}
-                        onPress={() =>
-                          void battleCall({ action: "report", id, reason })
-                            .then(() => {
-                              setReporting(false);
-                              setMessage("Thanks — we’ll review it.");
-                            })
-                            .catch((e) => setMessage(e.message))
-                        }
+                        title="Stop sharing"
+                        onPress={() => setStopping(true)}
                       />
-                    ))
-                  ) : (
-                    <Button
-                      secondary
-                      title="Report this battle"
-                      onPress={() => setReporting(true)}
-                    />
-                  ))}
-              </View>
-            )}
-          </View>
-        )}
+                    ))}
+                  {!battle.isOwner &&
+                    (reporting ? (
+                      [
+                        "Inappropriate image",
+                        "Harassment",
+                        "Privacy concern",
+                        "Other",
+                      ].map((reason) => (
+                        <Button
+                          key={reason}
+                          secondary
+                          title={reason}
+                          disabled={busy}
+                          onPress={() =>
+                            void battleCall({ action: "report", id, reason })
+                              .then(() => {
+                                setReporting(false);
+                                setMessage("Thanks — we’ll review it.");
+                              })
+                              .catch((e) => setMessage(e.message))
+                          }
+                        />
+                      ))
+                    ) : (
+                      <Button
+                        secondary
+                        title="Report this battle"
+                        onPress={() => setReporting(true)}
+                      />
+                    ))}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       </View>
     </Page>
   );
