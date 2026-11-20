@@ -746,14 +746,23 @@ export function Page({
   children,
   scroll = true,
   keyboardInsets = true,
+  statusBand = gradients.yellow[0],
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   keyboardInsets?: boolean;
+  // Fills the safe area behind the system status bar. Every page opens with
+  // the yellow header, so this is the gradient's top stop and the two join
+  // seamlessly; pass c.cream for a page that has no yellow header.
+  statusBand?: string;
 }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, backgroundColor: c.cream, paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: c.cream }}>
+      <View
+        pointerEvents="none"
+        style={{ height: insets.top, backgroundColor: statusBand }}
+      />
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"

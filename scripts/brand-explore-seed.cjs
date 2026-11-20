@@ -41,54 +41,13 @@ const US_STORES = [
 const us = process.argv.includes("--us");
 const PER_BRAND = us ? 120 : 40;
 const brands = us ? US_STORES : process.argv.slice(2);
-const kinds = [
-  [/jean|denim pant/i, "Denim"],
-  [/\bskirt/i, "Skirts"],
-  [/\bshorts\b/i, "Shorts"],
-  [/sweater|cardigan|knitwear|turtleneck/i, "Knitwear"],
-  [/swim|bikini|boardshort|bathing/i, "Swimwear"],
-  [/jacket|coat|bomber|puffer|gilet|blazer|parka|windbreaker/i, "Jackets"],
-  [/hood|sweatshirt|crewneck|zip[- ]up/i, "Hoodies"],
-  [/\bdress(es)?\b(?! shirt)|jumpsuit|romper|playsuit/i, "Dresses"],
-  [
-    /\btees?\b|t-shirt|\btop\b|tank|sweater|cardigan|\bcami\b|bodysuit|corset/i,
-    "Tops",
-  ],
-  [/shirt|polo|woven|blouse|oxford|kurta|kameez/i, "Shirts"],
-  [
-    /jean|\bpants?\b|trouser|\bshorts\b|skirt|cargo|jogger|legging|chino/i,
-    "Bottoms",
-  ],
-  [/sneaker|shoe|boot|loafer|slide|sandal|trainer/i, "Shoes"],
-  [
-    /\bcap\b|\bhat\b|beanie|\bbag\b|tote|backpack|scarf|\bbelt\b|sunglass/i,
-    "Accessories",
-  ],
-];
-// First match wins; otherwise the brand's default style.
-const styles = [
-  [
-    /kurta|kurti|shalwar|kameez|lawn|unstitched|dupatta|waistcoat|khaddar|shawl/i,
-    "Eastern",
-  ],
-  [
-    /legging|track|gym|active|training|yoga|running|performance|seamless/i,
-    "Athleisure",
-  ],
-  [
-    /blazer|suit|formal|oxford|dress shirt|loafer|tailored|pleated trouser/i,
-    "Formal",
-  ],
-  [
-    /vintage|washed|retro|varsity|corduroy|distressed|faded|heritage/i,
-    "Vintage",
-  ],
-  [
-    /graphic|baby tee|mini|corset|low rise|butterfly|rhinestone|metallic|y2k|halter/i,
-    "Y2K",
-  ],
-  [/basic|essential|plain|linen|cashmere|merino|relaxed|minimal/i, "Minimal"],
-];
+// Garment type, style and the wearable check live in one shared module so
+// imports and the reclassify migration follow the same rules.
+const {
+  wearable,
+  classifyKind,
+  classifyStyle,
+} = require("./catalog-classify.cjs");
 const skip =
   /boys|girls|kid|baby|infant|junior|underwear|brief|boxer|bra\b|sock|fragrance|perfume|gift|candle|\bcard\b|sample|bundle|mask|jewel|\bring\b|necklace|earring|watch|phone|sticker|poster|mug/i;
 const palettes = ["lavender", "coral", "sun", "mint", "pink"];
@@ -136,7 +95,11 @@ async function brandRows(brand, domain, fallback, brandIndex) {
       if (us && /kids?|toddler|infant|baby|boys|girls/i.test(tags.join(" ")))
         continue;
       if (skip.test(text)) continue;
-      const kind = kinds.find(([re]) => re.test(text))?.[1];
+      const rest = tags.join(" ").toLowerCase();
+      const input = { title: p.title, productType: p.product_type, tags: rest };
+      // Art prints, home goods and other non-clothing never enter Explore.
+      if (!wearable(input)) continue;
+      const kind = classifyKind(input);
       const image = p.images?.[0]?.src?.split("?")[0];
       const variant = p.variants?.find(
         (v) => v.available && Number(v.price) > 0,
@@ -146,7 +109,7 @@ async function brandRows(brand, domain, fallback, brandIndex) {
         continue;
       // Mix categories: at most a third of a brand's picks from one kind.
       if ((perKind[kind] ?? 0) >= PER_BRAND / 3) continue;
-      const style = styles.find(([re]) => re.test(text))?.[1] ?? fallback;
+      const style = classifyStyle({ ...input, brandStyle: fallback }).style;
       const name = p.title.trim().slice(0, 100);
       const id = `${brand}-${p.handle}`
         .toLowerCase()
