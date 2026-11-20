@@ -33,7 +33,7 @@ export function Lookalikes({ id }: { id: string }) {
   const [opening, setOpening] = useState(-1);
   const [error, setError] = useState("");
   const query = useQuery({
-    queryKey: ["lookalikes", id],
+    queryKey: ["verified-lookalikes", id],
     queryFn: () => fetchLookalikes(id),
     enabled: asked,
     staleTime: Infinity,
@@ -42,7 +42,7 @@ export function Lookalikes({ id }: { id: string }) {
   // Lookalike search isn't set up on this server: hide the section.
   if (query.error?.message === "LOOKALIKES_UNAVAILABLE") return null;
 
-  const items = query.data?.items ?? [];
+  const items = query.data?.verified ? query.data.items : [];
   const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
   const badge = (i: number) =>
     i === 0 && items[0]?.score !== undefined
@@ -64,7 +64,7 @@ export function Lookalikes({ id }: { id: string }) {
     setOpening(index);
     setError("");
     try {
-      const { url } = await lookalikeLink(id, index);
+      const { url } = await lookalikeLink(id, index, items[index]!.url);
       await Linking.openURL(url);
     } catch (e) {
       setError(friendlyError(e));
@@ -95,9 +95,9 @@ export function Lookalikes({ id }: { id: string }) {
           title="Couldn’t load lookalikes · Try again"
           onPress={() => void query.refetch()}
         />
-      ) : query.data && !query.data.items.length ? (
+      ) : query.data && !items.length ? (
         <Body style={{ fontSize: 14 }}>
-          No close lookalikes found for this item yet.
+          No verified product matches found. Try scanning the item for more options.
         </Body>
       ) : query.isPending ? (
         // Same full-screen wait as the try-on; closing goes back to the result.
@@ -115,16 +115,18 @@ export function Lookalikes({ id }: { id: string }) {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 12, paddingVertical: 4 }}
         >
-          {query.data!.items.map((item, i) => (
-            <ProductCard
-              key={item.url}
-              item={item}
-              badge={badge(i)}
-              busy={opening === i}
-              disabled={opening >= 0}
-              onBuy={() => void buy(i)}
-            />
-          ))}
+          {items.map((item, i) =>
+            item.price !== null ? (
+              <ProductCard
+                key={item.url}
+                item={item}
+                badge={badge(i)}
+                busy={opening === i}
+                disabled={opening >= 0}
+                onBuy={() => void buy(i)}
+              />
+            ) : null,
+          )}
           {query.data!.locked > 0 && (
             <Pressable
               accessibilityRole="button"

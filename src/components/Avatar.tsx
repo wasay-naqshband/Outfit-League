@@ -9,10 +9,12 @@ export function Avatar({
   uri,
   name,
   size,
+  fallbackColor = colors.yellow,
 }: {
   uri?: string | null;
   name?: string;
   size: number;
+  fallbackColor?: string;
 }) {
   return uri ? (
     <Image
@@ -26,7 +28,7 @@ export function Avatar({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: colors.yellow,
+        backgroundColor: fallbackColor,
         alignItems: "center",
         justifyContent: "center",
       }}

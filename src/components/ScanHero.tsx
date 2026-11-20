@@ -26,8 +26,8 @@ const LOOK = {
   item: "Black zip hoodie",
 };
 
-export function useReduceMotion() {
-  const [reduce, setReduce] = useState(false);
+export function useReduceMotion(initialValue = false) {
+  const [reduce, setReduce] = useState(initialValue);
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReduce);
     const sub = AccessibilityInfo.addEventListener(
@@ -263,9 +263,7 @@ export function ScanViewfinderHero() {
               opacity: blink,
             }}
           />
-          <Text style={{ fontFamily: fonts.bold, fontSize: 12 }}>
-            Scanning
-          </Text>
+          <Text style={{ fontFamily: fonts.bold, fontSize: 12 }}>Scanning</Text>
         </View>
         <StickerBadge
           rotate="-7deg"

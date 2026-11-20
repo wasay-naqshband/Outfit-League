@@ -6,6 +6,7 @@ import {
   usStorePage,
   shopping,
   usd,
+  verifiedOffers,
   type Lookalike,
 } from "../supabase/functions/_shared/lookalikes.ts";
 
@@ -206,4 +207,160 @@ test("shop the look: every option opens the store's own page", async () => {
     got.map((i) => i.url),
     [pages["Zara USA"], pages["H&M"], pages.Walmart],
   ); // "Tiny Shop" had no store page, so it is dropped
+});
+
+test("Try On keeps priced product pages and drops duplicate images and links", async () => {
+  const offer = (
+    url: string,
+    image = "https://img.com/sweater.jpg",
+  ): Lookalike => ({
+    title: "Dark brown ribbed turtleneck sweater",
+    store: "ASOS",
+    price: 49,
+    url,
+    image,
+  });
+  const asos = offer("https://www.asos.com/brand/sweater/prd/123");
+  const hm = offer(
+    "https://www2.hm.com/en_us/productpage.123.html",
+    "https://img.com/hm.jpg",
+  );
+  const got = await verifiedOffers("key", [
+    offer("https://www.framer.com/@dainel"),
+    offer("https://www.piclumen.com/products/ai-photography"),
+    offer("https://www.pinterest.com/p/123"),
+    offer("https://www.asos.com/search/?q=sweater"),
+    { ...asos, price: null },
+    asos,
+    offer(asos.url + "?tracking=1", "https://img.com/different.jpg"),
+    offer("https://www.example.com/products/2", asos.image + "?w=300"),
+    hm,
+  ]);
+  assert.deepEqual(got, [asos, hm]);
+});
+
+test("Try On resolves a Shopping redirect only to a merchant product page", async () => {
+  const item: Lookalike = {
+    title: "Ribbed turtleneck sweater",
+    store: "ASOS",
+    price: 49,
+    url: "https://www.google.com/shopping/product/123",
+    image: "https://img.com/sweater.jpg",
+  };
+  const product = "https://www.asos.com/brand/sweater/prd/123";
+  const search =
+    (...links: string[]): typeof fetch =>
+    async () =>
+      Response.json({ organic: links.map((link) => ({ link })) });
+  const category = "https://www.asos.com/women/sweaters";
+  assert.deepEqual(await verifiedOffers("key", [item], search(category)), []);
+  assert.deepEqual(
+    await verifiedOffers("key", [item], search(category, product)),
+    [{ ...item, url: product }],
+  );
+});
+
+test("Fit report extracts exact USD Product offers and rejects estimated or invalid prices", async () => {
+  const { productPrice } =
+    await import("../supabase/functions/_shared/lookalikes.ts");
+  const schema = (value: unknown) =>
+    '<script type="application/ld+json">' + JSON.stringify(value) + "</script>";
+  const product = (
+    price: unknown,
+    currency = "USD",
+    availability = "https://schema.org/InStock",
+  ) => ({
+    "@type": "Product",
+    offers: { "@type": "Offer", price, priceCurrency: currency, availability },
+  });
+  assert.equal(productPrice(schema({ "@graph": [product("41.29")] })), 41.29);
+  assert.equal(productPrice(schema(product(59.95))), 59.95);
+  for (const value of [
+    product(null),
+    product(0),
+    product(-3),
+    product("Free"),
+    product(41, "CAD"),
+    product(41, "USD", "OutOfStock"),
+    {
+      "@type": "Product",
+      offers: { lowPrice: 30, highPrice: 60, priceCurrency: "USD" },
+    },
+  ]) {
+    assert.equal(productPrice(schema(value)), null);
+  }
+  assert.equal(
+    productPrice("<html>Sign in for wholesale pricing</html>"),
+    null,
+  );
+  assert.equal(
+    productPrice(
+      '<script type="application/ld+json">bad</script>' +
+        schema(product("42.50")),
+    ),
+    42.5,
+  );
+});
+
+test("Fit report excludes wholesale, login redirects, broken pages and unpriced listings", async () => {
+  const { retailOffers, shoppingProductPage } =
+    await import("../supabase/functions/_shared/lookalikes.ts");
+  assert.equal(
+    shoppingProductPage("https://www.faire.com/products/hoodie"),
+    false,
+  );
+  assert.equal(
+    shoppingProductPage("https://shop.com:8443/products/hoodie"),
+    false,
+  );
+  assert.equal(
+    shoppingProductPage("https://www.pacsun.com/arc/fleece-012345.html"),
+    true,
+  );
+  const item = (host: string, price: number | null = 39): Lookalike => ({
+    title: "Vintage heavyweight hoodie",
+    store: host,
+    price,
+    url: "https://" + host + "/products/hoodie",
+    image: "https://images.com/" + host + ".jpg",
+  });
+  const requests: string[] = [];
+  const request = (async (input: string) => {
+    requests.push(input);
+    if (input.includes("broken.com")) return new Response("", { status: 404 });
+    if (input.includes("redirect.com"))
+      return new Response("", {
+        status: 302,
+        headers: { Location: "https://faire.com/products/hoodie" },
+      });
+    if (input.includes("faire.com"))
+      return new Response("<html>Sign in to shop wholesale</html>", {
+        headers: { "Content-Type": "text/html" },
+      });
+    return new Response(
+      '<script type="application/ld+json">' +
+        JSON.stringify({
+          "@type": "Product",
+          offers: { price: "41.29", priceCurrency: "USD" },
+        }) +
+        "</script>",
+      { headers: { "Content-Type": "text/html" } },
+    );
+  }) as typeof fetch;
+  const resolve = async (_host: string, type: "A" | "AAAA") =>
+    type === "A" ? ["93.184.216.34"] : [];
+  const got = await retailOffers(
+    "key",
+    [
+      item("faire.com"),
+      item("noprice.com", null),
+      item("broken.com"),
+      item("redirect.com"),
+      item("joesusa.com"),
+    ],
+    request,
+    resolve,
+  );
+  assert.deepEqual(got, [{ ...item("joesusa.com"), price: 41.29 }]);
+  assert.ok(!requests.some((url) => url.includes("noprice.com")));
 });

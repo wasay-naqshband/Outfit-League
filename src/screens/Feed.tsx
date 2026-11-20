@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, FlatList, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   AppHeader,
-  Button,
-  DarkPromoCard,
   DemoNote,
   EmptyState,
   ErrorState,
@@ -13,7 +12,7 @@ import {
   OutfitCard,
   Page,
 } from "../components/ui";
-import { explorePage, cardOutfit } from "../lib/explore";
+import { EXPLORE_PAGE_SIZE, explorePage, cardOutfit } from "../lib/explore";
 import { useApp } from "../lib/state";
 import { styleLabel, useOnboarding } from "../lib/onboarding";
 
@@ -26,11 +25,25 @@ const CHIPS = [
   "Vintage",
   "Athleisure",
   "Formal",
-  "Eastern",
+  "Tops",
+  "Shirts",
+  "Knitwear",
+  "Hoodies",
+  "Jackets",
+  "Denim",
+  "Bottoms",
+  "Dresses",
+  "Skirts",
+  "Shorts",
+  "Shoes",
+  "Accessories",
+  "Swimwear",
 ];
 
 export default function Feed() {
   const { session } = useApp();
+  const insets = useSafeAreaInsets();
+  const list = React.useRef<FlatList>(null);
   const [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [selected, setSelected] = useState("Trending");
@@ -52,89 +65,89 @@ export default function Feed() {
     initialPageParam: -1,
     queryFn: ({ pageParam }) => explorePage(query, selected, pageParam),
     getNextPageParam: (page) =>
-      page.length === 12 ? page[11]!.rank : undefined,
+      page.length === EXPLORE_PAGE_SIZE
+        ? page[page.length - 1]!.rank
+        : undefined,
     staleTime: 30000,
   });
   const data = feed.data?.pages.flat() ?? [];
   const filtered = !!query || selected !== "Trending";
+  useEffect(() => {
+    list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [query, selected]);
   return (
-    <Page>
-      <AppHeader
-        title="Explore"
-        query={search}
-        onQuery={setSearch}
-        chips={CHIPS}
-        selected={selected}
-        onSelect={setSelected}
-      />
-      {feed.isPending ? (
-        <View style={{ padding: 20 }}>
-          <LoadingSkeleton />
-        </View>
-      ) : feed.isError && !data.length ? (
-        <View style={{ padding: 20 }}>
-          <ErrorState
-            message="Explore couldn’t load."
-            retry={() => void feed.refetch()}
+    <Page scroll={false}>
+      <FlatList
+        ref={list}
+        data={data}
+        numColumns={2}
+        keyExtractor={(item) => item.id}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingBottom: Math.max(insets.bottom, 16) + 100,
+        }}
+        columnWrapperStyle={{ gap: 14, paddingHorizontal: 17 }}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        onEndReachedThreshold={2}
+        onEndReached={() => {
+          if (
+            feed.hasNextPage &&
+            !feed.isFetching &&
+            !feed.isFetchNextPageError
+          )
+            void feed.fetchNextPage();
+        }}
+        ListHeaderComponent={
+          <AppHeader
+            title="Explore"
+            query={search}
+            onQuery={setSearch}
+            chips={CHIPS}
+            selected={selected}
+            onSelect={setSelected}
           />
-        </View>
-      ) : (
-        <>
-          <View
-            style={{
-              flexDirection: "row",
-              gap: 14,
-              paddingHorizontal: 17,
-              paddingTop: 18,
-            }}
-          >
-            {[0, 1].map((column) => (
-              <View key={column} style={{ flex: 1, gap: 14 }}>
-                {data
-                  .filter((_, i) => i % 2 === column)
-                  .map((item, index) => (
-                    <React.Fragment key={item.id}>
-                      <OutfitCard
-                        outfit={cardOutfit(item)}
-                        height={
-                          index === 0
-                            ? column === 0
-                              ? 258
-                              : 201
-                            : column === 1
-                              ? 200
-                              : 228
-                        }
-                        label={column === 0 && index === 0}
-                        caption={item.price_label || "Sample"}
-                        source={!!item.photo_url}
-                        sticker={
-                          !filtered && index === 0
-                            ? column === 0
-                              ? "Trending"
-                              : "New"
-                            : undefined
-                        }
-                        onTry={() =>
-                          router.push({
-                            pathname: "/outfit/[id]",
-                            params: { id: item.id },
-                          })
-                        }
-                      />
-                      {column === 1 && index === 0 && !filtered && (
-                        <DarkPromoCard />
-                      )}
-                    </React.Fragment>
-                  ))}
-              </View>
-            ))}
+        }
+        renderItem={({ item, index }) => (
+          <View style={{ flex: 1, maxWidth: "50%", paddingTop: 14 }}>
+            <OutfitCard
+              outfit={cardOutfit(item)}
+              height={index % 2 === 0 ? 258 : 228}
+              label={index === 0}
+              caption={item.price_label || "Sample"}
+              source={!!item.photo_url}
+              sticker={
+                !filtered && index < 2
+                  ? index === 0
+                    ? "Trending"
+                    : "New"
+                  : undefined
+              }
+              onTry={() =>
+                router.push({
+                  pathname: "/outfit/[id]",
+                  params: { id: item.id },
+                })
+              }
+            />
           </View>
-          <View style={{ padding: 20, gap: 14 }}>
-            {!data.length && (
+        )}
+        ListEmptyComponent={
+          <View style={{ padding: 20 }}>
+            {feed.isPending ? (
+              <LoadingSkeleton />
+            ) : feed.isError ? (
+              <ErrorState
+                message="Explore couldn’t load."
+                retry={() => void feed.refetch()}
+              />
+            ) : (
               <EmptyState
                 title="No fits found."
-                message="Try a different name, brand, tag or style."
+                message="Try a different name, brand, category or style."
                 action="Clear filters"
                 onPress={() => {
                   setSearch("");
@@ -143,26 +156,23 @@ export default function Feed() {
                 }}
               />
             )}
+          </View>
+        }
+        ListFooterComponent={
+          <View style={{ padding: 20, gap: 14 }}>
+            {feed.isFetchingNextPage && (
+              <ActivityIndicator accessibilityLabel="Loading more outfits" />
+            )}
             {feed.isFetchNextPageError && (
               <ErrorState
                 message="More outfits couldn’t load."
                 retry={() => void feed.fetchNextPage()}
               />
             )}
-            {feed.hasNextPage && !feed.isFetchNextPageError && (
-              <Button
-                secondary
-                disabled={feed.isFetchingNextPage}
-                title={
-                  feed.isFetchingNextPage ? "Loading…" : "Load more outfits"
-                }
-                onPress={() => void feed.fetchNextPage()}
-              />
-            )}
+            <DemoNote text="Product photos from brand stores · prices and availability may change" />
           </View>
-        </>
-      )}
-      <DemoNote text="Beta preview · product photos from brand stores, not affiliated · prices may change" />
+        }
+      />
     </Page>
   );
 }

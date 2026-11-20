@@ -51,3 +51,58 @@ test("brand photos replace samples, and saving keeps the photo", async () => {
     /check constraint/,
   );
 });
+
+test("US catalog has thousands of mixed products and category pagination remains stable", async () => {
+  await db.exec(
+    await readFile("supabase/migrations/202610300031_explore_more.sql", "utf8"),
+  );
+  const migration = await readFile(
+    "supabase/migrations/202611200034_us_explore.sql",
+    "utf8",
+  );
+  await db.exec(migration);
+  // Re-importing must retain unique ranks and IDs.
+  await db.exec(migration);
+  const {
+    rows: [stats],
+  } = await db.query<any>(`select count(*)::int total,
+    count(distinct brand)::int brands, count(distinct category)::int categories
+    from public.explore_outfits where published`);
+  assert.ok(stats.total >= 3000);
+  assert.ok(stats.brands >= 30);
+  assert.ok(stats.categories >= 12);
+  const { rows: excluded } =
+    await db.query(`select id from public.explore_outfits
+    where published and (price_label not like 'USD %' or source_url ~ '(\\.pk|limelight|nishatlinen)')`);
+  assert.equal(excluded.length, 0);
+  const { rows: first } = await db.query<any>(
+    "select * from public.explore_page('','',-1,40)",
+  );
+  assert.equal(first.length, 40);
+  assert.ok(new Set(first.map((row) => row.brand)).size >= 30);
+  const ids = new Set<string>();
+  let cursor = -1;
+  while (true) {
+    const { rows } = await db.query<any>(
+      "select * from public.explore_page('','Knitwear',$1,40)",
+      [cursor],
+    );
+    if (!rows.length) break;
+    for (const row of rows) {
+      assert.equal(row.category, "Knitwear");
+      assert.ok(row.rank > cursor);
+      assert.ok(!ids.has(row.id));
+      ids.add(row.id);
+    }
+    cursor = rows.at(-1).rank;
+  }
+  assert.ok(ids.size >= 100);
+  const { rows: saved } = await db.query<any>(
+    "select explore_photo_url from public.library_items where owner_id=$1",
+    [owner],
+  );
+  assert.ok(
+    saved[0].explore_photo_url,
+    "saved inspiration keeps its original photo",
+  );
+});

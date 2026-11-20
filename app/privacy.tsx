@@ -53,8 +53,8 @@ export default function Privacy() {
         <Heading size={25}>Shopping & measurement.</Heading>
         <Body>
           Similar lookalikes and Shop the look search Google Shopping (through
-          Serper) with a short text description, and Lookalikes sends that
-          clothing photo to Google Lens to find similar items. Store pages open
+          Serper) with a short text description. Scan checks retailer product
+          pages for current prices. Store pages open
           in your browser; some links may earn us a commission, without
           attaching your private photos or account identity. Purchases are
           handled by Apple; RevenueCat receives your purchase record and an

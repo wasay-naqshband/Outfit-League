@@ -37,6 +37,8 @@ export function cardOutfit(item: ExploreOutfit): Outfit {
     photo: item.photo_url,
   };
 }
+export const EXPLORE_PAGE_SIZE = 40;
+
 export async function explorePage(
   search: string,
   style: string,
@@ -48,7 +50,7 @@ export async function explorePage(
     search_text: search.trim().slice(0, 100),
     style_filter: style === "Trending" ? "" : style,
     after_rank: after,
-    page_size: 12,
+    page_size: EXPLORE_PAGE_SIZE,
   });
   if (error) throw new Error("Explore couldn’t load. Please try again.");
   return data;

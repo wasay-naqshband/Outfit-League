@@ -166,12 +166,12 @@ export async function fetchPublicAsset(
   max: number,
   request: typeof fetch = fetch,
   resolve: ResolveDns = resolveDns,
-): Promise<{ type: string; data: Uint8Array }> {
+): Promise<{ type: string; data: Uint8Array; url: string }> {
   const url = publicUrl(value);
   if (url.protocol !== "https:" || !Number.isSafeInteger(max) || max < 1)
     throw new Error("LINK_FAILED");
   const result = await get(url, max, request, resolve);
-  return { type: result.type, data: result.bytes };
+  return { type: result.type, data: result.bytes, url: result.url.href };
 }
 
 const decodeEntities = (text: string) =>

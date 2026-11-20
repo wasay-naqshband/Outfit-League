@@ -1,7 +1,5 @@
-// Cheaper lookalikes: Google Lens finds what looks like the garment, Google
-// Shopping (both via Serper) prices it in the US, and an AI score keeps only
-// close matches. Closest match first, then cheapest.
-import { fetchPublicAsset } from "./link-image.ts";
+// Shopping and visual search helpers shared by Scan and Try On.
+import { fetchPublicAsset, type ResolveDns } from "./link-image.ts";
 export type Lookalike = {
   title: string;
   store: string;
@@ -89,11 +87,34 @@ export function usStorePage(link: string | null) {
   const sub = host.split(".").length > 2 ? host.split(".")[0]! : "";
   return (
     /\.(com|us)$/.test(host) &&
-    ["", "www", "us", "m", "shop", "store"].includes(sub) &&
+    /^(?:www\d*|us|m|shop|store)?$/.test(sub) &&
     !NOT_STORES.test(host) &&
     url.pathname.length > 1 &&
     // Foreign storefront paths like /au/en/ or /is-en/.
-    !/^\/(?!us\b)[a-z]{2}([-_][a-z]{2})?(\/|$)/i.test(url.pathname)
+    !/^\/(?!(?:us|en[-_]us)(?:\/|$))[a-z]{2}([-_][a-z]{2})?(\/|$)/i.test(
+      url.pathname,
+    )
+  );
+}
+
+// Require a priced Shopping result and a recognizable product-detail route.
+const NON_PRODUCT_HOST =
+  /(^|\.)(faire|fashiongo|creoate|abound|framer|piclumen|pinterest|instagram|tiktok|behance|dribbble|midjourney|freepik|unsplash|pexels|shutterstock|adobe|canva|wordpress|blogspot)\./;
+export function shoppingProductPage(link: string) {
+  const secure = https(link);
+  if (!secure || !usStorePage(secure) || isGoogle(secure)) return false;
+  const { hostname, pathname, username, password, port } = new URL(secure);
+  return (
+    !username &&
+    !password &&
+    !port &&
+    !NON_PRODUCT_HOST.test(hostname) &&
+    (/\/(?:products?|productpage|prd|p|dp|ip)\/[^/]+|\/productpage\.[^/]+|\/prd-\d+(?:\/|$)/i.test(
+      pathname,
+    ) ||
+      (/(^|\.)pacsun\.com$/.test(hostname) &&
+        /\/[a-z0-9-]+-\d+\.html$/i.test(pathname)) ||
+      (/(^|\.)zara\.com$/.test(hostname) && /-p\d+\.html$/i.test(pathname)))
   );
 }
 
@@ -136,6 +157,125 @@ export async function lens(
     .filter((q) => q.length > 8 && !seen.has(q) && !!seen.add(q))
     .slice(0, 2);
   return { items, queries };
+}
+
+// Resolve only Shopping-derived offers, and never surface unresolved redirects.
+export async function verifiedOffers(
+  key: string,
+  items: Lookalike[],
+  request: typeof fetch = fetch,
+) {
+  const offers: Lookalike[] = [];
+  const pages = new Set<string>();
+  const images = new Set<string>();
+  for (let i = 0; i < items.length && offers.length < 8; i += 3) {
+    const batch = await Promise.all(
+      items.slice(i, i + 3).map(async (item) => ({
+        ...item,
+        url: await storeLink(key, item, request, true).catch(() => item.url),
+      })),
+    );
+    for (const item of batch) {
+      if (
+        typeof item.price !== "number" ||
+        !Number.isFinite(item.price) ||
+        item.price <= 0 ||
+        !shoppingProductPage(item.url) ||
+        !https(item.image)
+      )
+        continue;
+      const page = new URL(item.url);
+      const image = new URL(item.image);
+      const pageKey =
+        page.hostname.replace(/^www\d*\./, "") +
+        page.pathname.replace(/\/$/, "");
+      const imageKey = image.hostname + image.pathname;
+      if (pages.has(pageKey) || images.has(imageKey)) continue;
+      pages.add(pageKey);
+      images.add(imageKey);
+      offers.push(item);
+      if (offers.length === 8) break;
+    }
+  }
+  return offers;
+}
+
+// Read a USD offer attached to Product JSON-LD, never an estimated price range.
+export function productPrice(html: string): number | null {
+  function offerPrice(value: unknown): number | null {
+    if (!value || typeof value !== "object") return null;
+    if (Array.isArray(value)) {
+      for (const offer of value) {
+        const price = offerPrice(offer);
+        if (price !== null) return price;
+      }
+      return null;
+    }
+    const offer = value as Record<string, unknown>;
+    if (
+      offer.priceCurrency !== "USD" ||
+      /OutOfStock|Discontinued|SoldOut/i.test(String(offer.availability ?? ""))
+    )
+      return null;
+    const price = Number(offer.price);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  }
+  function find(value: unknown): number | null {
+    if (!value || typeof value !== "object") return null;
+    const object = value as Record<string, unknown>;
+    const types = Array.isArray(object["@type"])
+      ? object["@type"]
+      : [object["@type"]];
+    if (types.includes("Product")) {
+      const price = offerPrice(object.offers);
+      if (price !== null) return price;
+    }
+    for (const child of Object.values(object)) {
+      const price = find(child);
+      if (price !== null) return price;
+    }
+    return null;
+  }
+  for (const script of html.matchAll(
+    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  )) {
+    try {
+      const price = find(JSON.parse(script[1]!));
+      if (price !== null) return price;
+    } catch {
+      // A malformed metadata block must not prevent checking another block.
+    }
+  }
+  return null;
+}
+
+// Scan returns only public product pages with a resolved current USD offer.
+export async function retailOffers(
+  key: string,
+  items: Lookalike[],
+  request: typeof fetch = fetch,
+  resolve?: ResolveDns,
+): Promise<Lookalike[]> {
+  const candidates = await verifiedOffers(key, items, request);
+  const checked = await Promise.all(
+    candidates.map(async (item) => {
+      try {
+        const page = await fetchPublicAsset(
+          item.url,
+          2_000_000,
+          request,
+          resolve,
+        );
+        if (!page.type.includes("html") || !shoppingProductPage(page.url))
+          return null;
+        const price = productPrice(new TextDecoder().decode(page.data));
+        return price === null ? null : { ...item, url: page.url, price };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return pieceOptions(checked.filter((item) => item !== null));
 }
 
 // Small product photo for the AI score, bounded and image-only.
@@ -295,6 +435,7 @@ export async function storeLink(
   key: string,
   item: Lookalike,
   request: typeof fetch = fetch,
+  productOnly = false,
 ): Promise<string> {
   if (!isGoogle(item.url)) return item.url;
   const data = await serper(
@@ -322,7 +463,9 @@ export async function storeLink(
       (link) =>
         name.length > 1 &&
         sameStore(domain(link).replace(/[^a-z0-9]/g, ""), name) &&
-        !listing.test(new URL(link).pathname),
+        (productOnly
+          ? shoppingProductPage(link)
+          : !listing.test(new URL(link).pathname)),
     ) ?? item.url
   );
 }

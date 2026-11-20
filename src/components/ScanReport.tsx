@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   AccessibilityInfo,
   Animated,
   Linking,
@@ -14,7 +13,6 @@ import { useIsFocused } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Haptics from "expo-haptics";
 import { Body, Button, CreditPill, Heading, Icon, StickerBadge } from "./ui";
 import { colors, fonts, gradients, shadow } from "../theme";
 import { pieceLink, type Lookalike, type Scan } from "../lib/tryon-api";
@@ -37,26 +35,18 @@ export function ScanReport({
   photo,
   scan,
   items,
-  saved,
-  saving,
   error,
   onBack,
   onShare,
-  onSave,
-  onTryOn,
   onScanAnother,
   onGallery,
 }: {
   photo: LocalPhoto;
   scan: Scan;
   items: Lookalike[];
-  saved: boolean;
-  saving: boolean;
   error: string;
   onBack: () => void;
   onShare: () => void;
-  onSave: () => void;
-  onTryOn: () => void;
   onScanAnother: () => void;
   onGallery: () => void;
 }) {
@@ -80,7 +70,27 @@ export function ScanReport({
     (Number.isFinite(priceLow)
       ? `$${priceLow}–${priceValues[1] ?? priceLow}`
       : "");
-  const cheapest = Math.min(...items.map((item) => item.price ?? Infinity));
+  const products = items.filter((item) => {
+    if (
+      typeof item.price !== "number" ||
+      !Number.isFinite(item.price) ||
+      item.price <= 0
+    )
+      return false;
+    try {
+      const url = new URL(item.url);
+      return (
+        url.protocol === "https:" &&
+        !url.username &&
+        !url.password &&
+        !url.port &&
+        !/(^|\.)(faire|fashiongo|creoate|abound)\./i.test(url.hostname)
+      );
+    } catch {
+      return false;
+    }
+  });
+  const cheapest = Math.min(...products.map((item) => item.price!));
 
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
@@ -97,7 +107,7 @@ export function ScanReport({
     setShopError("");
     try {
       analytics.track("shop_look_clicked", { part: "accessory" });
-      await Linking.openURL((await pieceLink(items[index]!)).url);
+      await Linking.openURL((await pieceLink(products[index]!)).url);
     } catch {
       setShopError("This store link couldn’t open. Try again.");
     } finally {
@@ -112,7 +122,7 @@ export function ScanReport({
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingBottom: Math.max(insets.bottom, 16) + 230,
+          paddingBottom: Math.max(insets.bottom, 16) + 100,
         }}
       >
         <LinearGradient
@@ -472,11 +482,11 @@ export function ScanReport({
                   color: "#D9D6E3",
                 }}
               >
-                {items.length} {items.length === 1 ? "match" : "matches"}
+                {products.length} {products.length === 1 ? "match" : "matches"}
               </Text>
             </View>
-            {items.length ? (
-              items.map((item, index) => (
+            {products.length ? (
+              products.map((item, index) => (
                 <ShopRow
                   key={`${item.url}-${index}`}
                   item={item}
@@ -486,15 +496,6 @@ export function ScanReport({
                       : item.price === cheapest
                         ? "Cheapest"
                         : null
-                  }
-                  saving={
-                    item.price !== null &&
-                    item.price === cheapest &&
-                    priceLow !== undefined &&
-                    Number.isFinite(priceLow) &&
-                    item.price < priceLow
-                      ? Math.floor(priceLow - item.price)
-                      : null
                   }
                   disabled={opening >= 0}
                   busy={opening === index}
@@ -568,24 +569,6 @@ export function ScanReport({
           )}
         </View>
       </ScrollView>
-
-      <View
-        style={{
-          position: "absolute",
-          left: 12,
-          right: 12,
-          bottom: Math.max(16, insets.bottom) + 76,
-          flexDirection: "row",
-          gap: 10,
-          padding: 10,
-          borderRadius: 28,
-          backgroundColor: "rgba(255,255,255,0.96)",
-          ...shadow(0.16),
-        }}
-      >
-        <TactileButton icon="sparkles" title="Try it on me" onPress={onTryOn} />
-        <SaveButton saved={saved} saving={saving} onPress={onSave} />
-      </View>
     </View>
   );
 }
@@ -615,108 +598,6 @@ function Round({
       }}
     >
       <Icon name={icon} size={20} />
-    </Pressable>
-  );
-}
-
-function SaveButton({
-  saved,
-  saving,
-  onPress,
-}: {
-  saved: boolean;
-  saving: boolean;
-  onPress: () => void;
-}) {
-  const [pressed, setPressed] = useState(false);
-  const scale = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (saved)
-      Animated.sequence([
-        Animated.spring(scale, { toValue: 1.2, useNativeDriver: true }),
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
-      ]).start();
-  }, [saved, scale]);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Save to Closet"
-      accessibilityState={{ checked: saved, disabled: saved || saving }}
-      onPress={onPress}
-      disabled={saved || saving}
-      onPressIn={() => {
-        setPressed(true);
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-          () => {},
-        );
-      }}
-      onPressOut={() => setPressed(false)}
-      style={{
-        width: 56,
-        height: 56,
-        borderRadius: 20,
-        borderWidth: 2.5,
-        borderColor: colors.ink,
-        backgroundColor: saved ? colors.ink : colors.white,
-        alignItems: "center",
-        justifyContent: "center",
-        transform: [{ translateY: pressed ? 4 : 0 }],
-        ...shadow(pressed ? 0 : 0.18),
-      }}
-    >
-      {saving ? (
-        <ActivityIndicator color={colors.ink} />
-      ) : (
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <Icon
-            name={saved ? "heart-filled" : "heart"}
-            size={23}
-            color={saved ? colors.yellow : colors.ink}
-          />
-        </Animated.View>
-      )}
-    </Pressable>
-  );
-}
-
-function TactileButton({
-  icon,
-  title,
-  onPress,
-}: {
-  icon: "sparkles";
-  title: string;
-  onPress: () => void;
-}) {
-  const [pressed, setPressed] = useState(false);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      onPressIn={() => {
-        setPressed(true);
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-          () => {},
-        );
-      }}
-      onPressOut={() => setPressed(false)}
-      style={{
-        flex: 1,
-        height: 56,
-        borderRadius: 20,
-        borderWidth: 2.5,
-        borderColor: colors.ink,
-        backgroundColor: colors.yellow,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 10,
-        transform: [{ translateY: pressed ? 4 : 0 }],
-        ...shadow(pressed ? 0 : 0.2),
-      }}
-    >
-      <Icon name={icon} size={21} />
-      <Text style={{ fontFamily: fonts.bold, fontSize: 17 }}>{title}</Text>
     </Pressable>
   );
 }
@@ -1165,14 +1046,12 @@ function TipBubble({ text }: { text: string }) {
 function ShopRow({
   item,
   badge,
-  saving,
   disabled,
   busy,
   onShop,
 }: {
   item: Lookalike;
   badge: string | null;
-  saving: number | null;
   disabled: boolean;
   busy: boolean;
   onShop: () => void;
@@ -1247,7 +1126,7 @@ function ShopRow({
       </View>
       <View style={{ alignItems: "flex-end", gap: 8 }}>
         <Text style={{ fontFamily: fonts.heading, fontSize: 20 }}>
-          {item.price === null ? "See price" : `$${item.price.toFixed(2)}`}
+          {`$${item.price!.toFixed(2)}`}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -1272,15 +1151,6 @@ function ShopRow({
           </Text>
         </Pressable>
       </View>
-      {saving !== null && (
-        <StickerBadge
-          size={17}
-          rotate="5deg"
-          style={{ position: "absolute", right: 10, top: -10 }}
-        >
-          ${saving} under typical
-        </StickerBadge>
-      )}
     </View>
   );
 }

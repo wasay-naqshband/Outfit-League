@@ -21,7 +21,6 @@ import { generateSpinVideo, SPIN_START } from "../_shared/spin.ts";
 import { cleanupAccounts } from "../_shared/account-cleanup.ts";
 import { linkImage } from "../_shared/link-image.ts";
 import {
-  lens,
   directOptions,
   cachedRail,
   feedRails,
@@ -30,6 +29,9 @@ import {
   shopping,
   storeLink,
   thumbnail,
+  verifiedOffers,
+  retailOffers,
+  shoppingProductPage,
   type Lookalike,
 } from "../_shared/lookalikes.ts";
 import {
@@ -95,7 +97,7 @@ type Job = {
   garment_parts: string[];
   result_asset_id: string | null;
   rating: unknown;
-  lookalikes: Lookalike[] | null;
+  lookalikes: Lookalike[] | { version: 2; items: Lookalike[] } | null;
   status: string;
   provider_id: string | null;
   expires_at: string;
@@ -553,50 +555,41 @@ async function makeSpin(job: Job, spin: Spin) {
     );
   }
 }
-// Lens (what looks the same) + shopping (US prices), then an AI score keeps
-// only close matches. Each search is best-effort; scoring failure falls back
-// to cheapest first.
+// Describe the main garment, then search the same Shopping feed used by Scan.
 async function findLookalikes(job: Job): Promise<Lookalike[]> {
   const gemini = env("GEMINI_API_KEY"),
     serper = env("SERPER_API_KEY");
-  // Styled outfits have no clothing photo to search with.
   if (!job.garment_asset_id) throw new Error("NOT_FOUND");
   const garment = await readInput(job.garment_asset_id, job.owner_id);
-  const asset: Asset = required(
-    await db
-      .from("private_assets")
-      .select("*")
-      .eq("id", job.garment_asset_id)
-      .single(),
+  const query = await garmentQuery(gemini, garment);
+  const offers = await verifiedOffers(
+    serper,
+    await shopping(serper, query, fetch, 12),
   );
-  // Lens fetches the photo itself: a private link that expires in 5 minutes.
-  const signed = required(await bucket.createSignedUrl(asset.path, 300));
-  const [query, visual] = await Promise.all([
-    garmentQuery(gemini, garment),
-    lens(serper, signed.signedUrl).catch(() => ({ items: [], queries: [] })),
-  ]);
+  if (!offers.length) return [];
+
+  const photos = await Promise.all(offers.map((item) => thumbnail(item.image)));
   const seen = new Set<string>();
-  const priced = await Promise.all(
-    [query, ...visual.queries].map((q) => shopping(serper, q).catch(() => [])),
+  const candidates = offers.flatMap((item, i) => {
+    const photo = photos[i];
+    if (photo && seen.has(photo.data)) return [];
+    if (photo) seen.add(photo.data);
+    return [{ item, photo }];
+  });
+  const scorable = candidates.flatMap(({ item, photo }) =>
+    photo ? [{ item, photo }] : [],
   );
-  // Visual matches first (closest look), then up to 8 priced results per query.
-  const candidates = [
-    ...visual.items.slice(0, 8),
-    ...priced.flatMap((list) => list.slice(0, 8)),
-  ]
-    .filter((item) => !seen.has(item.url) && !!seen.add(item.url))
-    .slice(0, 24);
-  const photos = await Promise.all(candidates.map((c) => thumbnail(c.image)));
-  const scorable = candidates.filter((_, i) => photos[i]);
-  const scores = await scoreLookalikes(
-    gemini,
-    garment,
-    photos.filter((p): p is { mime: string; data: string } => !!p),
-  ).catch(() => null);
+  const scores = scorable.length
+    ? await scoreLookalikes(
+        gemini,
+        garment,
+        scorable.map(({ photo }) => photo),
+      ).catch(() => null)
+    : null;
   return rank(
     scores
-      ? scorable.map((item, i) => ({ ...item, score: scores[i] }))
-      : candidates,
+      ? scorable.map(({ item }, i) => ({ ...item, score: scores[i] }))
+      : candidates.map(({ item }) => item),
   );
 }
 // The photo check runs before a credit is reserved. It fails open: a checker
@@ -904,44 +897,45 @@ Deno.serve(async (req) => {
       return reply(await resultView(job));
     }
     if (body.action === "lookalikes" || body.action === "lookalike-link") {
-      const serper = env("SERPER_API_KEY");
       if (!env("SERPER_API_KEY") || !env("GEMINI_API_KEY"))
         throw new Error("LOOKALIKES_UNAVAILABLE");
       const job = await ownedJob(body.id, owner);
       if (job.status !== "completed") throw new Error("NOT_FOUND");
-      let items = job.lookalikes;
+      const cache = job.lookalikes;
+      let items =
+        cache && !Array.isArray(cache) && cache.version === 2
+          ? cache.items
+          : null;
       if (!items) {
+        // A tap from an old result must never open a newly ranked index.
+        if (body.action === "lookalike-link") throw new Error("NOT_FOUND");
         await rpc("battle_rate", { p_key: "lookalike:" + owner, p_max: 30 });
         items = await findLookalikes(job);
         checked(
           await db
             .from("try_on_jobs")
-            .update({ lookalikes: items })
+            .update({ lookalikes: { version: 2, items } })
             .eq("id", job.id),
         );
       }
-      // Free shows the two cheapest; Pro sees them all.
+      // Free sees the first two ranked offers; Pro sees them all.
       const shown = (await hasPro(owner)) ? items.length : 2;
       if (body.action === "lookalikes")
         return reply({
+          verified: true,
           items: items.slice(0, shown),
           locked: Math.max(0, items.length - shown),
         });
       const index = Number(body.index);
       const item = items.slice(0, shown)[index];
-      if (!item) throw new Error("NOT_FOUND");
+      if (
+        !item?.price ||
+        !shoppingProductPage(item.url) ||
+        (body.url !== undefined && body.url !== item.url)
+      )
+        throw new Error("NOT_FOUND");
       await rpc("battle_rate", { p_key: "link:" + owner, p_max: 60 });
-      const url = await storeLink(serper, item).catch(() => item.url);
-      if (url !== item.url) {
-        items[index] = { ...item, url };
-        checked(
-          await db
-            .from("try_on_jobs")
-            .update({ lookalikes: items })
-            .eq("id", job.id),
-        );
-      }
-      return reply({ url });
+      return reply({ url: item.url });
     }
     if (body.action === "scan") {
       // Scan tab: one photo → what it is, how it suits them, where to buy it.
@@ -973,9 +967,8 @@ Deno.serve(async (req) => {
           .eq("owner_id", owner)
           .single(),
       );
-      const [spotted, signed, palette, closet] = await Promise.all([
+      const [spotted, palette, closet] = await Promise.all([
         readInput(asset.id, owner),
-        bucket.createSignedUrl(asset.path, 300),
         myPalette(owner, key),
         db
           .from("library_items")
@@ -988,40 +981,26 @@ Deno.serve(async (req) => {
       const styles = (Array.isArray(body.styles) ? body.styles : [])
         .filter((x): x is string => typeof x === "string" && x.length <= 24)
         .slice(0, 6);
-      // Lens (exact look) runs alongside the AI read; shopping needs its query.
-      const [scan, visual] = await Promise.all([
-        scanItem(
-          key,
-          spotted,
-          {
-            season: palette.season ?? "",
-            best: (palette.best ?? []).map((c) => c.name).slice(0, 8),
-            styles,
-          },
-          (closet.data ?? []) as ClosetItem[],
-        ),
-        serper && signed.data
-          ? lens(serper, signed.data.signedUrl).catch(() => ({
-              items: [] as Lookalike[],
-              queries: [],
-            }))
-          : { items: [] as Lookalike[], queries: [] },
-      ]);
+      const scan = await scanItem(
+        key,
+        spotted,
+        {
+          season: palette.season ?? "",
+          best: (palette.best ?? []).map((c) => c.name).slice(0, 8),
+          styles,
+        },
+        (closet.data ?? []) as ClosetItem[],
+      );
       const priced =
         serper && scan.query
           ? await shopping(serper, scan.query).catch(() => [] as Lookalike[])
           : [];
       return reply({
         scan,
-        // Visual matches first, so "Best match" is the closest look.
-        items: serper
-          ? await directOptions(serper, [
-              ...visual.items.slice(0, 3),
-              ...priced,
-            ])
-          : [],
+        items: serper ? await retailOffers(serper, priced) : [],
       });
     }
+    // Older installed builds still request Closet Shop rails.
     if (body.action === "shop-feed") {
       const serper = env("SERPER_API_KEY");
       if (!serper) throw new Error("LOOKALIKES_UNAVAILABLE");
@@ -1067,15 +1046,20 @@ Deno.serve(async (req) => {
         const url = typeof item?.url === "string" ? item.url : "";
         if (!url.startsWith("https://") || url.length > 2048)
           throw new Error("INVALID_REQUEST");
-        return reply({
-          url: await storeLink(serper, {
+        const resolved = await storeLink(
+          serper,
+          {
             title: String(item!.title ?? "").slice(0, 120),
             store: String(item!.store ?? "").slice(0, 60),
             price: null,
             url,
             image: url,
-          }).catch(() => url),
-        });
+          },
+          fetch,
+          true,
+        );
+        if (!shoppingProductPage(resolved)) throw new Error("LINK_FAILED");
+        return reply({ url: resolved });
       }
       const query = typeof body.query === "string" ? body.query.trim() : "";
       if (!query || query.length > 100) throw new Error("INVALID_REQUEST");

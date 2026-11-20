@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Modal, Platform, Pressable, Text, View } from "react-native";
 import { Image } from "expo-image";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Body,
@@ -107,14 +107,6 @@ export default function ScanTab() {
       setBusy(false);
     }
   }
-  // Shop tab → "Take photo" / "Gallery": start that pick once, then clear it.
-  const { pick } = useLocalSearchParams<{ pick?: "camera" | "gallery" }>();
-  useEffect(() => {
-    if (!pick) return;
-    router.setParams({ pick: undefined });
-    void snap(pick === "camera" && Platform.OS !== "web");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pick]);
   async function save() {
     if (!photo || !result || saved || saving) return;
     setSaving(true);
@@ -152,8 +144,6 @@ export default function ScanTab() {
         photo={photo}
         scan={scan}
         items={result.items}
-        saved={saved}
-        saving={saving}
         error={error}
         onBack={() => {
           void disposePhoto(photo);
@@ -165,13 +155,6 @@ export default function ScanTab() {
           void sharePreview(photo.uri, scan.name).catch(() =>
             setError("We couldn’t share that scan. Please try again."),
           );
-        }}
-        onSave={() => void save()}
-        onTryOn={() => {
-          draft.setGarment(photo);
-          setPhoto(null);
-          setResult(null);
-          router.push("/(tabs)/try-on");
         }}
         onScanAnother={() => void snap(Platform.OS !== "web")}
         onGallery={() => void snap(false)}

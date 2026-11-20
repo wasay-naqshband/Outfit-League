@@ -101,8 +101,8 @@ export async function saveLook(id: string, saved: boolean) {
 export const imageFromLink = (url: string) =>
   photoFromServer({ action: "link", url });
 // The store's own product page for a lookalike (not Google's).
-export const lookalikeLink = (id: string, index: number) =>
-  callTryOn<{ url: string }>({ action: "lookalike-link", id, index });
+export const lookalikeLink = (id: string, index: number, url: string) =>
+  callTryOn<{ url: string }>({ action: "lookalike-link", id, index, url });
 export type Lookalike = {
   title: string;
   store: string;
@@ -113,7 +113,7 @@ export type Lookalike = {
   score?: number;
 };
 export const fetchLookalikes = (id: string) =>
-  callTryOn<{ items: Lookalike[]; locked: number }>({
+  callTryOn<{ items: Lookalike[]; locked: number; verified?: true }>({
     action: "lookalikes",
     id,
   });
@@ -169,10 +169,6 @@ export const pickOutfit = (
     person,
     anchor,
   });
-// Shop tab: rails of real products for their department and style.
-export type ShopRail = { id: string; title: string; items: Lookalike[] };
-export const shopFeed = (styles: string[], rail?: string) =>
-  callTryOn<{ rails: ShopRail[] }>({ action: "shop-feed", styles, rail });
 // Shop the look: real products for one piece, and the store's own page.
 let running = 0;
 const waiting: (() => void)[] = [];

@@ -54,6 +54,7 @@ export type IconName =
   | "whatsapp"
   | "copy"
   | "send"
+  | "bell"
   | "coffee"
   | "briefcase"
   | "map"

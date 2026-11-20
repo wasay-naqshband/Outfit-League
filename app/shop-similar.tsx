@@ -10,7 +10,7 @@ import {
   LoadingSkeleton,
   Page,
 } from "../src/components/ui";
-import { Bone, Grid, Retry } from "../src/components/ShopTab";
+import { Bone, Grid, Retry } from "../src/components/ShoppingGrid";
 import { cleanSourceUrl, libraryItem, shopQuery } from "../src/lib/library";
 import { pieceLink, shopPiece, type Lookalike } from "../src/lib/tryon-api";
 import { useApp } from "../src/lib/state";
