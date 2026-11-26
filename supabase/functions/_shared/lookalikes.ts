@@ -401,7 +401,11 @@ export async function cachedRail(
   const hit = feedCache.get(query);
   if (hit && Date.now() - hit.at < FEED_TTL) return hit.items;
   const items = await load();
-  if (items.length) feedCache.set(query, { at: Date.now(), items });
+  if (items.length) {
+    feedCache.delete(query);
+    if (feedCache.size >= 500) feedCache.delete(feedCache.keys().next().value!);
+    feedCache.set(query, { at: Date.now(), items });
+  }
   return items;
 }
 export function feedRails(

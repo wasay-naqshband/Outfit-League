@@ -257,18 +257,25 @@ async function closetMatch(owner: string, query: string) {
 const photoQueries = new Map<string, string | null>();
 async function photoQuery(owner: string, id: string | null) {
   if (!id) return null;
-  if (photoQueries.has(id)) return photoQueries.get(id)!;
   let query: string | null = null;
   try {
     const item = checked(
       await db
         .from("library_items")
-        .select("photo_path")
+        .select("photo_path,updated_at")
         .eq("id", id)
         .eq("owner_id", owner)
         .maybeSingle(),
-    ) as { photo_path: string | null } | null;
+    ) as { photo_path: string | null; updated_at: string } | null;
     if (item?.photo_path) {
+      // Authorize on every request, including cache hits and deleted items.
+      const cacheKey = JSON.stringify([
+        owner,
+        id,
+        item.photo_path,
+        item.updated_at,
+      ]);
+      if (photoQueries.has(cacheKey)) return photoQueries.get(cacheKey)!;
       const file = await db.storage
         .from("library-private")
         .download(item.photo_path);
@@ -279,12 +286,16 @@ async function photoQuery(owner: string, id: string | null) {
           env("GEMINI_API_KEY"),
           "data:image/jpeg;base64," + toBase64(bytes),
         );
+        if (query) {
+          if (photoQueries.size >= 500)
+            photoQueries.delete(photoQueries.keys().next().value!);
+          photoQueries.set(cacheKey, query);
+        }
       }
     }
   } catch {
     query = null;
   }
-  photoQueries.set(id, query);
   return query;
 }
 // Image editors answer in one long call, so it runs after the request returns;
