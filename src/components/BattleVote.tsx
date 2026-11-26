@@ -366,6 +366,7 @@ export function FitPicker({
                     }
                     cachePolicy="none"
                     contentFit="cover"
+                    contentPosition="top"
                     accessibilityLabel={option.label || `Outfit ${option.side}`}
                     style={{ flex: 1 }}
                   />

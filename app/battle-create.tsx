@@ -11,7 +11,8 @@ import {
   Page,
   SegmentedControl,
 } from "../src/components/ui";
-import { LookPicker } from "../src/components/LookPicker";
+import { LookPicker, lookSource } from "../src/components/LookPicker";
+import type { LocalPhoto } from "../src/types/tryon";
 import { useApp } from "../src/lib/state";
 import { battleCall, shareBattleLink } from "../src/lib/battles";
 import { analytics } from "../src/lib/analytics";
@@ -65,6 +66,7 @@ export default function CreateBattle() {
   const [looks, setLooks] = useState<string[]>(
     params.look ? [params.look] : [],
   );
+  const [imports, setImports] = useState<LocalPhoto[]>([]);
   const [title, setTitle] = useState<string>(PROMPTS[kind][0][1]);
   const [mode, setMode] = useState("Anonymous");
   const [busy, setBusy] = useState(false);
@@ -78,21 +80,27 @@ export default function CreateBattle() {
     setError("");
     try {
       const id = nonce.current;
-      await battleCall({
+      const sources = await Promise.all(
+        looks.map((look) => lookSource(look, imports)),
+      );
+      // Tapping Share is the consent to show these looks to anyone with the link.
+      const made = await battleCall({
         action: "create",
         id,
         kind,
         title: title.trim(),
         mode: mode === "Public" ? "public" : "anonymous",
-        sources: looks.map((look) => ({ kind: "job", id: look })),
+        sources,
+        publish: true,
+        consent: true,
       });
-      // Tapping Share is the consent to show these looks to anyone with the link.
-      await battleCall({ action: "publish", id, consent: true });
-      await client.invalidateQueries({ queryKey: ["battles"] });
+      // An older server only saves the draft.
+      if (made.status === "draft")
+        await battleCall({ action: "publish", id, consent: true });
+      void client.invalidateQueries({ queryKey: ["battles"] });
       analytics.track("battle_created", {
         voting_mode: mode === "Public" ? "public" : "anonymous",
       });
-      void askForNotifications(); // to hear about votes and comments
       router.replace({ pathname: "/battle/[id]", params: { id } });
       await shareBattleLink(
         id,
@@ -101,6 +109,8 @@ export default function CreateBattle() {
           ? `I challenge you to a fit battle on Outfit League 👀 Join with your look:`
           : `${title.trim()} Vote for my fit 👇`,
       ).catch(() => {});
+      // After the share sheet, so the two system prompts don't collide.
+      void askForNotifications(); // to hear about votes and comments
     } catch (e) {
       setError(e instanceof Error ? e.message : "Please try again.");
       nonce.current = randomUUID();
@@ -125,6 +135,8 @@ export default function CreateBattle() {
               selected={looks}
               max={versus ? 1 : 4}
               onChange={setLooks}
+              imports={imports}
+              onImports={setImports}
             />
             <Step
               n={2}
@@ -180,11 +192,6 @@ export default function CreateBattle() {
               selected={mode}
               onChange={setMode}
             />
-            <Body style={{ fontSize: 14 }}>
-              {mode === "Public"
-                ? "Voters sign in and their name shows next to their pick."
-                : "Anyone with the link can vote. Only totals are shown."}
-            </Body>
             {!!error && <Body style={{ color: colors.ink }}>{error}</Body>}
             <Button
               icon="share"
@@ -198,11 +205,6 @@ export default function CreateBattle() {
               disabled={busy || !ready || !title.trim()}
               onPress={() => void create()}
             />
-            <Body style={{ fontSize: 12, textAlign: "center" }}>
-              {versus
-                ? "Anyone with the link can see your look, name and profile photo."
-                : "Anyone with the link can see these looks."}
-            </Body>
           </>
         )}
       </View>

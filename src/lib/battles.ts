@@ -80,6 +80,9 @@ const messages: Record<string, string> = {
   VOTING_CLOSED: "Voting is closed for this battle.",
   INVALID_STATE:
     "This battle has changed or someone already joined. Refresh to see it.",
+  INVALID_IMAGE: "That photo couldn’t be used. Please pick another one.",
+  IMAGE_DIMENSIONS: "That photo couldn’t be used. Please pick another one.",
+  INVALID_RESULT: "That photo couldn’t be used. Please pick another one.",
   PUBLISH_CONSENT_REQUIRED:
     "Confirm that these two images can be shared publicly.",
 };

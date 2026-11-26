@@ -24,7 +24,8 @@ import {
   Page,
 } from "../../src/components/ui";
 import { BattleCards } from "../../src/components/BattleCards";
-import { LookPicker } from "../../src/components/LookPicker";
+import { LookPicker, lookSource } from "../../src/components/LookPicker";
+import type { LocalPhoto } from "../../src/types/tryon";
 import { Avatar } from "../../src/components/Avatar";
 import {
   FitPicker,
@@ -172,6 +173,7 @@ export default function BattleDetail() {
   });
   const [choice, setChoice] = useState<Side | null>(null);
   const [pick, setPick] = useState<string[]>([]);
+  const [imports, setImports] = useState<LocalPhoto[]>([]);
   const [name, setName] = useState("");
   const [consent, setConsent] = useState(false);
   const [comment, setComment] = useState("");
@@ -271,6 +273,26 @@ export default function BattleDetail() {
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError")
         setMessage(error.message);
+    }
+  }
+  // Accept a versus invite: a signed-in friend picks a look, a guest a photo.
+  async function accept() {
+    if (busy) return;
+    last.current = "join";
+    setBusy(true);
+    setMessage("");
+    try {
+      if (session) {
+        const source = await lookSource(pick[0]!, imports);
+        await action("join", { sourceKind: source.kind, sourceId: source.id });
+      } else {
+        const photo = imports.find((p) => p.uri === pick[0]);
+        if (photo) await action("guest-join", { name, image: photo.base64 });
+      }
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      setBusy(false);
     }
   }
   function signIn() {
@@ -521,6 +543,8 @@ export default function BattleDetail() {
         ) : (
           <FlatHeader
             title={battle?.kind === "versus" ? "Fit battle" : "Help me choose"}
+            // Guests have no credits; hide the "Demo mode" badge from them.
+            pill={session ? undefined : false}
           />
         )}
         <View style={{ padding: 20, gap: 18 }}>
@@ -558,12 +582,16 @@ export default function BattleDetail() {
                 <Body style={{ textAlign: "center" }}>{battle.title}</Body>
               </View>
               {battle.options[0]?.url && (
+                // Portrait frame, whole photo: never crop a head off.
                 <Image
                   source={{ uri: battle.options[0].url }}
-                  contentFit="cover"
+                  contentFit="contain"
                   cachePolicy="none"
                   style={{
-                    height: 300,
+                    width: "100%",
+                    maxWidth: 360,
+                    alignSelf: "center",
+                    aspectRatio: 3 / 4,
                     borderRadius: 26,
                     backgroundColor: colors.white,
                   }}
@@ -594,27 +622,46 @@ export default function BattleDetail() {
                     and you can share it for votes.
                   </Body>
                 </>
-              ) : !session ? (
-                <Button title="Sign in to accept" onPress={signIn} />
               ) : (
                 <>
-                  <Heading size={20}>Pick your look</Heading>
-                  <LookPicker selected={pick} max={1} onChange={setPick} />
+                  <Heading size={20}>
+                    {session ? "Pick your look" : "Add your outfit photo"}
+                  </Heading>
+                  <LookPicker
+                    selected={pick}
+                    max={1}
+                    onChange={setPick}
+                    imports={imports}
+                    onImports={setImports}
+                  />
+                  {!session && (
+                    <View style={{ flexDirection: "row" }}>
+                      <TextInput
+                        accessibilityLabel="Your name"
+                        value={name}
+                        onChangeText={setName}
+                        maxLength={40}
+                        placeholder="Your name (optional)"
+                        placeholderTextColor={colors.placeholder}
+                        style={input}
+                      />
+                    </View>
+                  )}
                   <Button
                     icon="zap"
-                    title={busy ? "Joining…" : "Accept the battle"}
+                    title={busy ? "Joining…" : "Accept battle"}
                     disabled={busy || pick.length !== 1}
-                    onPress={() =>
-                      void action("join", {
-                        sourceKind: "job",
-                        sourceId: pick[0],
-                      })
-                    }
+                    onPress={() => void accept()}
                   />
                   <Body style={{ fontSize: 12, textAlign: "center" }}>
-                    Anyone with the link will see your look, name and profile
-                    photo.
+                    Anyone with the link will see your photo and name.
                   </Body>
+                  {!session && (
+                    <TextLink
+                      title="Sign in to use your saved looks"
+                      onPress={signIn}
+                    />
+                  )}
                 </>
               )}
             </>
@@ -1029,16 +1076,18 @@ export default function BattleDetail() {
                         </View>
                       )}
                       {!voter && !name.trim() && (
-                        <TextInput
-                          ref={nameField}
-                          accessibilityLabel="Your name"
-                          value={name}
-                          onChangeText={setName}
-                          maxLength={40}
-                          placeholder="Your name"
-                          placeholderTextColor={colors.placeholder}
-                          style={[input, { flex: undefined }]}
-                        />
+                        <View style={{ flexDirection: "row" }}>
+                          <TextInput
+                            ref={nameField}
+                            accessibilityLabel="Your name"
+                            value={name}
+                            onChangeText={setName}
+                            maxLength={40}
+                            placeholder="Your name"
+                            placeholderTextColor={colors.placeholder}
+                            style={input}
+                          />
+                        </View>
                       )}
                       <View
                         style={{

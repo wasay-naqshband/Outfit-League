@@ -52,6 +52,11 @@ before(async () => {
       "utf8",
     ),
   );
+  for (const file of [
+    "202611260036_battle_samples.sql",
+    "202611260037_guest_battle.sql",
+  ])
+    await db.exec(await readFile("supabase/migrations/" + file, "utf8"));
   await db.query("insert into auth.users values($1),($2)", [owner, other]);
   await db.query("insert into public.profiles values($1,null),($2,null)", [
     owner,
@@ -512,4 +517,48 @@ test("vote milestones notify once each; comment pushes wait 3 hours", async () =
     [id],
   );
   assert.equal(await comment(), true);
+});
+
+// Fresh creator: the shared one has used up its 10 battles a day.
+const newUser = async () => {
+  const id = randomUUID();
+  await db.query("insert into auth.users values($1)", [id]);
+  await db.query("insert into public.profiles values($1,null)", [id]);
+  return id;
+};
+
+test("a 4-look poll can save every column the battles function writes", async () => {
+  const who = await newUser();
+  const id = await createN("choose", await jobs(who, 4), who);
+  const columns = ["a", "b", "c", "d"].map(
+    (s) => `${s}_path=id||'/${s}.jpg',${s}_sample=null,${s}_label='AI preview'`,
+  );
+  await service(
+    `update public.battles set ready=true,${columns.join(",")} where id=$1`,
+    [id],
+  );
+  await service("select public.manage_battle($1,$2,'publish')", [who, id]);
+});
+
+test("one guest can reserve a waiting invite; nobody else can then take it", async () => {
+  const who = await newUser();
+  const [mine] = await jobs(who, 1);
+  const [theirs] = await jobs(other, 1);
+  const id = await createN("versus", [mine!], who);
+  const claim = (key: string) =>
+    service("select public.claim_guest_battle($1,$2,'Friend')", [id, key]);
+  await assert.rejects(claim("guest-1"), /INVALID_STATE/); // still a draft
+  await service("update public.battles set ready=true where id=$1", [id]);
+  await service("select public.manage_battle($1,$2,'publish')", [who, id]);
+  await claim("guest-1");
+  await claim("guest-1"); // the same guest retrying
+  await assert.rejects(claim("guest-2"), /INVALID_STATE/);
+  await assert.rejects(
+    service("select public.join_battle($1,$2,'job',$3)", [other, id, theirs]),
+    /INVALID_STATE/,
+  );
+  await assert.rejects(
+    user("select public.claim_guest_battle($1,'forged','x')", [id], null),
+    /permission denied/,
+  );
 });

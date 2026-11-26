@@ -2,6 +2,7 @@ export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 export const CONSENT_VERSION = "tryon-v1";
 export async function readRequestJson(
   req: Request,
+  maxBytes = 16384,
 ): Promise<Record<string, unknown>> {
   const reader = req.body?.getReader();
   if (!reader) throw new Error("INVALID_REQUEST");
@@ -13,7 +14,7 @@ export async function readRequestJson(
       const { value, done } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 16384) throw new Error("INVALID_REQUEST");
+      if (size > maxBytes) throw new Error("INVALID_REQUEST");
       text += decoder.decode(value, { stream: true });
     }
     text += decoder.decode();

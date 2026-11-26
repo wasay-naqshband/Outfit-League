@@ -19,7 +19,10 @@ export async function disposePhoto(photo: LocalPhoto | null) {
     );
 }
 
-export async function pickPhoto(camera = false): Promise<LocalPhoto | null> {
+export async function pickPhoto(
+  camera = false,
+  maxSide?: number,
+): Promise<LocalPhoto | null> {
   if (camera) {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted)
@@ -37,12 +40,14 @@ export async function pickPhoto(camera = false): Promise<LocalPhoto | null> {
     : await ImagePicker.launchImageLibraryAsync(options);
   if (result.canceled || !result.assets[0]) return null;
   const input = result.assets[0];
-  return preparePhoto(input.uri, input.width, input.height);
+  return preparePhoto(input.uri, input.width, input.height, maxSide);
 }
 export async function preparePhoto(
   uri: string,
   width?: number,
   height?: number,
+  // Full detail for 2K results by default; the 8 MB cap below still applies.
+  maxSide = 2400,
 ): Promise<LocalPhoto> {
   // Shared native images may not include dimensions. Decode locally, never fetch social links.
   if (!width || !height) {
@@ -56,8 +61,7 @@ export async function preparePhoto(
   const input = { uri, width, height };
   if (input.width < 64 || input.height < 64)
     throw new Error("Please choose a larger, clearer photo.");
-  // Full detail for 2K results; the 8 MB cap below still applies.
-  const ratio = Math.min(1, 2400 / Math.max(input.width, input.height));
+  const ratio = Math.min(1, maxSide / Math.max(input.width, input.height));
   const output = await ImageManipulator.manipulateAsync(
     input.uri,
     [

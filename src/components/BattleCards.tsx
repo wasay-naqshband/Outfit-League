@@ -78,6 +78,7 @@ export function BattleCards({
                   }
                   cachePolicy="none"
                   contentFit="cover"
+                  contentPosition="top"
                   style={{
                     position: "absolute",
                     top: 0,
