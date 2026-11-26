@@ -3,6 +3,7 @@ import {
   readRequestJson,
   uuid,
   validateJpeg,
+  decodeResult,
   MAX_IMAGE_BYTES,
 } from "../_shared/domain.ts";
 import { objectionable } from "../_shared/profanity.ts";
@@ -64,6 +65,12 @@ async function player(id: string | null) {
     avatar: photo.data?.signedUrl ?? null,
   };
 }
+const uploadSnapshot = (path: string, bytes: Uint8Array, upsert = false) =>
+  db.storage.from("battle-images").upload(path, bytes, {
+    contentType: "image/jpeg",
+    cacheControl: "0",
+    upsert,
+  });
 async function copySource(
   battle: string,
   side: Side,
@@ -117,23 +124,22 @@ async function copySource(
   if (!path && !sample) throw new Error("INVALID_SOURCE");
   const target = path ? `${battle}/${side}.jpg` : null;
   if (path) {
-    const data = checked(await db.storage.from(sourceBucket).download(path));
-    if (!data || data.size > MAX_IMAGE_BYTES) throw new Error("INVALID_SOURCE");
-    const bytes = new Uint8Array(await data.arrayBuffer());
-    validateJpeg(bytes);
-    const uploaded = await db.storage
-      .from("battle-images")
-      .upload(target!, bytes, {
-        contentType: "image/jpeg",
-        cacheControl: "0",
-        upsert: false,
-      });
-    if (
-      uploaded.error &&
-      !["409", "Duplicate"].includes(
-        String("statusCode" in uploaded.error ? uploaded.error.statusCode : ""),
-      )
-    ) {
+    let saved: { error: unknown };
+    if (kind === "job") {
+      // Results were validated when the server saved them: copy inside storage.
+      saved = await db.storage
+        .from(sourceBucket)
+        .copy(path, target!, { destinationBucket: "battle-images" });
+    } else {
+      // Closet photos are uploaded by the app, so check the bytes.
+      const data = checked(await db.storage.from(sourceBucket).download(path));
+      if (!data || data.size > MAX_IMAGE_BYTES)
+        throw new Error("INVALID_SOURCE");
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      validateJpeg(bytes);
+      saved = await uploadSnapshot(target!, bytes);
+    }
+    if (saved.error) {
       // A retry may find a completed immutable snapshot from its previous attempt.
       const existing = await db.storage.from("battle-images").download(target!);
       if (existing.error || !existing.data) throw new Error("INVALID_SOURCE");
@@ -177,7 +183,12 @@ async function view(
       .eq("voter_key", key)
       .maybeSingle(),
     row.kind === "versus"
-      ? Promise.all([player(row.owner_id), player(row.b_owner_id)])
+      ? Promise.all([
+          player(row.owner_id),
+          row.b_guest_name && row.b_path
+            ? { name: row.b_guest_name, avatar: null }
+            : player(row.b_owner_id),
+        ])
       : null,
   ]);
   const blocked = new Set(
@@ -208,12 +219,15 @@ async function view(
     (c) => c.parent_id == null || visibleCommentIds.has(c.parent_id),
   );
   const commentLikes = visibleComments.length
-    ? checked(
+    ? (checked(
         await db
           .from("battle_comment_likes")
           .select("comment_id,voter_key")
-          .in("comment_id", visibleComments.map((c) => c.id)),
-      ) ?? []
+          .in(
+            "comment_id",
+            visibleComments.map((c) => c.id),
+          ),
+      ) ?? [])
     : [];
   let voters: unknown[] = [];
   if (
@@ -238,7 +252,7 @@ async function view(
     ready: row.ready,
     kind: row.kind,
     isOwner: row.owner_id === owner,
-    isFriend: !!owner && row.b_owner_id === owner,
+    isFriend: owner ? row.b_owner_id === owner : row.b_guest_key === key,
     options: SIDES.map((side, i) => ({
       side: side.toUpperCase(),
       url: urls[i],
@@ -280,7 +294,8 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(data), { status, headers });
   try {
     if (req.method !== "POST") return reply({ error: "INVALID_REQUEST" }, 405);
-    const body = await readRequestJson(req);
+    // Room for a guest's compressed photo; every other field is length-checked.
+    const body = await readRequestJson(req, 3_000_000);
     if (!uuid(body.token)) throw new Error("INVALID_REQUEST");
     let owner: string | null = null;
     const bearer = req.headers.get("authorization")?.replace(/^Bearer /i, "");
@@ -450,6 +465,17 @@ Deno.serve(async (req) => {
             .eq("ready", false),
         );
       }
+      // Saves the app a second round trip before the share sheet.
+      if (
+        row?.status === "draft" &&
+        body.publish === true &&
+        body.consent === true
+      )
+        await rpc("manage_battle", {
+          p_owner: owner,
+          p_id: id,
+          p_action: "publish",
+        });
       return reply(await view(id, owner, key, 0));
     }
     if (["publish", "close", "unpublish"].includes(String(body.action))) {
@@ -477,6 +503,7 @@ Deno.serve(async (req) => {
         p_source: body.sourceId,
       });
       // Retries re-run the copy; the battle stays waiting until it succeeds.
+      checked(await db.storage.from("battle-images").remove([`${id}/b.jpg`]));
       const copy = await copySource(
         id,
         "b",
@@ -501,6 +528,61 @@ Deno.serve(async (req) => {
         body: `“${title}” is live. Share it and get the votes in.`,
       }));
       return reply(await view(id, owner, key, 0));
+    }
+    if (body.action === "guest-join") {
+      // No account: one photo, for one invite that is still waiting.
+      if (owner || typeof body.image !== "string")
+        throw new Error("INVALID_REQUEST");
+      const bytes = decodeResult("data:image/jpeg;base64," + body.image);
+      const typed = typeof body.name === "string" ? body.name.trim() : "";
+      const name =
+        typed && !objectionable(typed) ? typed.slice(0, 40).trim() : "Friend";
+      const prior = checked(
+        await db
+          .from("battles")
+          .select("status,b_guest_key")
+          .eq("id", id)
+          .single(),
+      );
+      // The same guest retrying after a lost reply just sees the live battle.
+      if (prior?.status === "published" && prior.b_guest_key === key)
+        return reply(await view(id, null, key, 0));
+      if (network)
+        await rpc("battle_rate", { p_key: "guest:" + network, p_max: 10 });
+      await rpc("claim_guest_battle", { p_id: id, p_key: key, p_name: name });
+      try {
+        const path = `${id}/b.jpg`;
+        checked(await uploadSnapshot(path, bytes, true));
+        const live = checked(
+          await db
+            .from("battles")
+            .update({
+              b_path: path,
+              b_label: "Friend’s photo",
+              status: "published",
+              published_at: new Date().toISOString(),
+            })
+            .eq("id", id)
+            .eq("status", "waiting")
+            .eq("b_guest_key", key)
+            .select("id"),
+        );
+        if (!live?.length) throw new Error("INVALID_STATE");
+      } catch (error) {
+        // Free the side again so the invite isn't stuck.
+        await db
+          .from("battles")
+          .update({ b_guest_key: null, b_guest_name: null })
+          .eq("id", id)
+          .eq("status", "waiting")
+          .eq("b_guest_key", key);
+        throw error;
+      }
+      tellOwner(id, null, (title) => ({
+        title: "Your friend joined the battle ⚡",
+        body: `“${title}” is live. Share it and get the votes in.`,
+      }));
+      return reply(await view(id, null, key, 0));
     }
     if (body.action === "vote") {
       if (!["A", "B", "C", "D"].includes(String(body.choice)))
@@ -615,6 +697,9 @@ Deno.serve(async (req) => {
       "PUBLISH_CONSENT_REQUIRED",
       "INVALID_STATE",
       "COMMENT_NOT_ALLOWED",
+      "INVALID_IMAGE",
+      "IMAGE_DIMENSIONS",
+      "INVALID_RESULT",
     ].includes(message)
       ? message
       : "REQUEST_FAILED";
