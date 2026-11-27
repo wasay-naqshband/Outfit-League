@@ -9,7 +9,7 @@ workflows:
       app_store_connect: Codemagic
     environment:
       node: 24.19.0
-      xcode: "27.1"
+      xcode: "27.0"
       cocoapods: default
       groups:
         - outfit_league
@@ -83,7 +83,7 @@ workflows:
     max_build_duration: 45
     environment:
       node: 24.19.0
-      xcode: "27.1"
+      xcode: "27.0"
       cocoapods: default
       vars: *app_vars
     scripts:
