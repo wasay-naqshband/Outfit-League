@@ -551,47 +551,9 @@ export function Figure({
     </View>
   );
 }
-export function OutfitLabelBar({
-  outfit,
-  onTry,
-  caption,
-}: {
-  outfit: Outfit;
-  onTry: () => void;
-  caption?: string;
-}) {
-  const compact = useWindowDimensions().width <= 360;
-  return (
-    <View
-      style={[
-        s.labelBar,
-        compact && { paddingLeft: 8, paddingRight: 4, gap: 2 },
-      ]}
-    >
-      <View style={{ flex: 1 }}>
-        <Heading size={compact ? 12 : 15} style={{ letterSpacing: -0.2 }}>
-          {outfit.name}
-        </Heading>
-        {!compact && (
-          <Text style={{ fontFamily: f.body, fontSize: 13, color: c.text3 }}>
-            {caption ?? outfit.category}
-          </Text>
-        )}
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Try ${outfit.name}`}
-        onPress={onTry}
-        style={s.sparkle}
-      >
-        <Icon name="sparkles" size={19} color={c.yellow} />
-      </Pressable>
-    </View>
-  );
-}
+// A product tile: the whole photo on top, every word underneath it.
 export function OutfitCard({
   outfit,
-  height = 228,
   label = false,
   sticker,
   source = false,
@@ -600,7 +562,6 @@ export function OutfitCard({
   caption,
 }: {
   outfit: Outfit;
-  height?: number;
   label?: boolean;
   sticker?: string;
   source?: boolean;
@@ -609,8 +570,8 @@ export function OutfitCard({
   caption?: string;
 }) {
   return (
-    <View style={[s.cardShadow, { height }]}>
-      <LinearGradient colors={gradients[outfit.palette]} style={s.card}>
+    <View style={s.cardShadow}>
+      <View style={s.tile}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={"Open " + outfit.name}
@@ -622,56 +583,91 @@ export function OutfitCard({
                 params: { id: outfit.id },
               }))
           }
-          style={StyleSheet.absoluteFill}
         >
-          {outfit.photo ? (
-            <Image
-              source={{ uri: `${outfit.photo}?width=600` }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              contentPosition="top"
-              accessibilityLabel={outfit.name}
-            />
-          ) : (
-            <Figure image={outfit.image} bottom={label ? 64 : 0} />
-          )}
-          {source && (
-            <View style={s.source}>
-              <Text style={{ fontFamily: f.bold, fontSize: 12 }}>
-                {outfit.source}
-              </Text>
-            </View>
-          )}
-          {sticker && (
-            <StickerBadge
-              style={{
-                position: "absolute",
-                top: 8,
-                left: sticker === "New" ? undefined : 6,
-                right: sticker === "New" ? 8 : undefined,
-              }}
-              rotate={sticker === "New" ? "5deg" : "-6deg"}
-              color={sticker === "New" ? c.white : c.pink}
+          {/* 4:5 is the most common store photo shape; "contain" never crops. */}
+          <LinearGradient
+            colors={
+              outfit.photo ? [c.white, c.white] : gradients[outfit.palette]
+            }
+            style={{ aspectRatio: 4 / 5 }}
+          >
+            {outfit.photo ? (
+              <Image
+                source={{ uri: `${outfit.photo}?width=600` }}
+                style={StyleSheet.absoluteFill}
+                contentFit="contain"
+                accessibilityLabel={outfit.name}
+              />
+            ) : (
+              <Figure image={outfit.image} />
+            )}
+          </LinearGradient>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              minHeight: 34,
+              paddingHorizontal: 8,
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{ flex: 1, fontFamily: f.bold, fontSize: 12 }}
             >
-              {sticker}
-            </StickerBadge>
-          )}
+              {source ? outfit.source : ""}
+            </Text>
+            {sticker && (
+              <StickerBadge
+                size={11}
+                style={{ paddingVertical: 2, paddingHorizontal: 7 }}
+                rotate={sticker === "New" ? "5deg" : "-6deg"}
+                color={sticker === "New" ? c.white : c.pink}
+              >
+                {sticker}
+              </StickerBadge>
+            )}
+          </View>
         </Pressable>
         {label && (
-          <OutfitLabelBar
-            caption={caption}
-            outfit={outfit}
-            onTry={
-              onTry ??
-              (() =>
-                router.push({
-                  pathname: "/(tabs)/try-on",
-                  params: { look: outfit.id },
-                }))
-            }
-          />
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              paddingLeft: 8,
+              paddingRight: 4,
+              paddingBottom: 6,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Heading size={14} style={{ letterSpacing: -0.2 }}>
+                {outfit.name}
+              </Heading>
+              <Text
+                style={{ fontFamily: f.body, fontSize: 13, color: c.text3 }}
+              >
+                {caption ?? outfit.category}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Try ${outfit.name}`}
+              onPress={
+                onTry ??
+                (() =>
+                  router.push({
+                    pathname: "/(tabs)/try-on",
+                    params: { look: outfit.id },
+                  }))
+              }
+              style={s.sparkle}
+            >
+              <Icon name="sparkles" size={19} color={c.yellow} />
+            </Pressable>
+          </View>
         )}
-      </LinearGradient>
+      </View>
     </View>
   );
 }
@@ -1033,19 +1029,13 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  labelBar: {
-    position: "absolute",
-    bottom: 8,
-    left: 8,
-    right: 8,
-    height: 56,
-    paddingLeft: 10,
-    paddingRight: 6,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.94)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  // Like card, but as tall as what is inside it.
+  tile: {
+    borderWidth: 4,
+    borderColor: c.white,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: c.white,
   },
   sparkle: {
     width: 44,
