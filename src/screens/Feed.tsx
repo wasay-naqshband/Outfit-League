@@ -115,7 +115,6 @@ export default function Feed() {
           <View style={{ flex: 1, maxWidth: "50%", paddingTop: 14 }}>
             <OutfitCard
               outfit={cardOutfit(item)}
-              height={index % 2 === 0 ? 258 : 228}
               label={index === 0}
               caption={item.price_label || "Sample"}
               source={!!item.photo_url}
