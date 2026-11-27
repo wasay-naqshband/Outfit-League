@@ -188,7 +188,7 @@ export default function BattleDetail() {
   const [stopping, setStopping] = useState(false);
   const [copied, setCopied] = useState(false);
   const [allComments, setAllComments] = useState(false);
-  const nameField = useRef<TextInput>(null);
+  const nameField = useRef<React.ComponentRef<typeof TextInput>>(null);
   // Which action the current message belongs to, so errors show beside it.
   const last = useRef("");
   const lock = useRef(false);

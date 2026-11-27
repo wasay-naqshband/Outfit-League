@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useIsFocused } from "expo-router";
 import {
   AccessibilityInfo,
   Animated,
@@ -9,7 +10,6 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { useIsFocused } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";

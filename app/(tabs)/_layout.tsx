@@ -12,7 +12,7 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
-      tabBar={({ state, navigation }) => (
+      tabBar={({ state, emitter, navigateToTab }) => (
         <FloatingTabBar
           active={labels[state.routes[state.index]!.name]!}
           onSelect={(label) => {
@@ -20,12 +20,13 @@ export default function TabLayout() {
               (item) => labels[item.name] === label,
             );
             if (!route) return;
-            const event = navigation.emit({
+            const event = emitter.emit({
               type: "tabPress",
               target: route.key,
               canPreventDefault: true,
             });
-            if (!event.defaultPrevented) navigation.navigate(route.name);
+            const focused = state.routes[state.index]!.key === route.key;
+            if (!focused && !event.defaultPrevented) navigateToTab(route.key);
           }}
         />
       )}

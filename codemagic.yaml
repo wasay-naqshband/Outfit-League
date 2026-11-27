@@ -9,7 +9,7 @@ workflows:
       app_store_connect: Codemagic
     environment:
       node: 24.19.0
-      xcode: 26.4
+      xcode: "27.1"
       cocoapods: default
       groups:
         - outfit_league
@@ -19,7 +19,7 @@ workflows:
           - outfit-league-share
         certificates:
           - Outfit League certificate
-      vars:
+      vars: &app_vars
         CI: "1"
         EXPO_NO_TELEMETRY: "1"
         EXPO_PUBLIC_APP_URL: https://chutni.store
@@ -75,3 +75,56 @@ workflows:
         # "Owner auto" group. Beta review is only needed for external testers.
         submit_to_testflight: false
         submit_to_app_store: false
+
+  # Builds for the iPhone simulator and opens the app. Uploads nothing.
+  ios-launch-check:
+    name: Outfit League launch check (no upload)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      node: 24.19.0
+      xcode: "27.1"
+      cocoapods: default
+      vars: *app_vars
+    scripts:
+      - name: Install locked dependencies
+        script: |
+          set -eu
+          npm install --global --force pnpm@11.25.0
+          pnpm install --frozen-lockfile
+      - name: Check source
+        script: |
+          set -eu
+          pnpm typecheck
+          pnpm test
+      - name: Generate iOS project and install pods
+        script: |
+          set -eu
+          pnpm exec expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Build for the simulator
+        script: |
+          set -euo pipefail
+          mkdir -p build
+          xcodebuild -workspace ios/OutfitLeague.xcworkspace -scheme OutfitLeague \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim build > build/xcodebuild.log 2>&1 \
+            || { grep -E "error:|\*\* BUILD" build/xcodebuild.log | tail -60; exit 1; }
+      - name: Open the app and confirm it stays open
+        script: |
+          set -euo pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for k in sorted(d, reverse=True) if "iOS-27" in k for x in d[k] if x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/sim/Build/Products/Release-iphonesimulator/OutfitLeague.app
+          xcrun simctl launch "$UDID" com.outfitleague.app
+          sleep 30
+          xcrun simctl io "$UDID" screenshot build/launch.png
+          xcrun simctl spawn "$UDID" launchctl list | grep com.outfitleague.app \
+            || { echo "The app closed after launch."; ls ~/Library/Logs/DiagnosticReports || true; exit 1; }
+    artifacts:
+      - build/launch.png
+      - build/xcodebuild.log
+      - /Users/builder/Library/Logs/DiagnosticReports/*.ips

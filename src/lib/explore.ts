@@ -99,6 +99,7 @@ export async function sampleGarment(key: keyof typeof garments) {
           height: 800,
         }
       : Image.resolveAssetSource(source);
+  if (!asset) throw new Error("This sample photo is unavailable.");
   return preparePhoto(asset.uri, asset.width, asset.height);
 }
 
